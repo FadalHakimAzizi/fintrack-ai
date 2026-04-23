@@ -1,0 +1,135 @@
+{
+  "name": "FinTrack — Weekly Email Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "weeks", "triggerAtDay": [1], "triggerAtHour": 8 }]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Every Monday 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.id as user_id, u.email, p.full_name, p.currency\nFROM auth.users u\nJOIN public.profiles p ON p.id = u.id\nWHERE u.email IS NOT NULL",
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Get All Users",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  transaction_type,\n  SUM(amount) as total,\n  COUNT(*) as count\nFROM public.transactions\nWHERE user_id = '{{ $json.user_id }}'\n  AND transaction_date >= CURRENT_DATE - INTERVAL '7 days'\n  AND transaction_date < CURRENT_DATE\nGROUP BY transaction_type",
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Weekly Totals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [680, 200],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COALESCE(category, 'Uncategorized') as category,\n  SUM(amount) as total,\n  COUNT(*) as count\nFROM public.transactions\nWHERE user_id = '{{ $json.user_id }}'\n  AND transaction_type = 'expense'\n  AND transaction_date >= CURRENT_DATE - INTERVAL '7 days'\n  AND transaction_date < CURRENT_DATE\nGROUP BY category\nORDER BY total DESC\nLIMIT 5",
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Top Categories",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [680, 360],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  b.category,\n  b.amount as budget,\n  COALESCE(SUM(t.amount), 0) as spent,\n  ROUND(COALESCE(SUM(t.amount), 0) / b.amount * 100, 1) as pct\nFROM public.budgets b\nLEFT JOIN public.transactions t ON\n  t.user_id = b.user_id\n  AND t.category = b.category\n  AND t.transaction_type = 'expense'\n  AND date_trunc('month', t.transaction_date) = date_trunc('month', CURRENT_DATE)\nWHERE b.user_id = '{{ $json.user_id }}'\n  AND b.month = date_trunc('month', CURRENT_DATE)::date\nGROUP BY b.category, b.amount\nHAVING COALESCE(SUM(t.amount), 0) / b.amount >= 0.8\nORDER BY pct DESC",
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Budget Alerts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [680, 520],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate data from all query nodes\nconst user = $('Get All Users').item.json;\nconst totals = $('Weekly Totals').all().map(i => i.json);\nconst categories = $('Top Categories').all().map(i => i.json);\nconst budgetAlerts = $('Budget Alerts').all().map(i => i.json);\n\nconst currency = user.currency || 'IDR';\nconst name = user.full_name || user.email.split('@')[0];\n\nconst fmt = (n) => {\n  const num = Number(n);\n  if (currency === 'IDR') return 'Rp ' + num.toLocaleString('id-ID');\n  return currency + ' ' + num.toLocaleString();\n};\n\nconst income = totals.find(r => r.transaction_type === 'income')?.total || 0;\nconst expense = totals.find(r => r.transaction_type === 'expense')?.total || 0;\nconst net = income - expense;\nconst txCount = totals.reduce((s, r) => s + Number(r.count), 0);\n\n// Build category rows\nconst catRows = categories.map(c =>\n  `<tr><td style=\"padding:6px 12px;border-bottom:1px solid #e5eeff\">${c.category}</td>\n   <td style=\"padding:6px 12px;border-bottom:1px solid #e5eeff;text-align:right;font-weight:600\">${fmt(c.total)}</td>\n   <td style=\"padding:6px 12px;border-bottom:1px solid #e5eeff;color:#757684\">${c.count} tx</td></tr>`\n).join('');\n\n// Build budget alert rows\nconst budgetRows = budgetAlerts.map(b => {\n  const over = Number(b.pct) >= 100;\n  return `<tr><td style=\"padding:6px 12px\">${b.category}</td>\n    <td style=\"padding:6px 12px;text-align:right\">${fmt(b.spent)} / ${fmt(b.budget)}</td>\n    <td style=\"padding:6px 12px;font-weight:700;color:${over ? '#ba1a1a' : '#d97706'}\">${b.pct}% ${over ? '🚨' : '⚠️'}</td></tr>`;\n}).join('');\n\nconst weekStart = new Date();\nweekStart.setDate(weekStart.getDate() - 7);\nconst dateRange = weekStart.toLocaleDateString('id-ID', {day:'2-digit',month:'short'}) + ' – ' +\n  new Date().toLocaleDateString('id-ID', {day:'2-digit',month:'short',year:'numeric'});\n\nconst html = `<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"></head>\n<body style=\"font-family:Inter,system-ui,sans-serif;background:#f8f9ff;margin:0;padding:20px\">\n<div style=\"max-width:560px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(30,64,175,0.08)\">\n\n  <!-- Header -->\n  <div style=\"background:#00288e;padding:32px;color:#fff\">\n    <div style=\"font-size:24px;font-weight:700;margin-bottom:4px\">FinTrack AI</div>\n    <div style=\"opacity:0.8;font-size:14px\">Weekly Report · ${dateRange}</div>\n    <div style=\"margin-top:12px;font-size:16px\">Halo, <strong>${name}</strong>! 👋</div>\n  </div>\n\n  <!-- Summary Cards -->\n  <div style=\"display:flex;gap:0;border-bottom:1px solid #e5eeff\">\n    <div style=\"flex:1;padding:20px;text-align:center;border-right:1px solid #e5eeff\">\n      <div style=\"font-size:12px;color:#757684;text-transform:uppercase;letter-spacing:.05em\">Pemasukan</div>\n      <div style=\"font-size:20px;font-weight:700;color:#006c49;margin-top:4px\">${fmt(income)}</div>\n    </div>\n    <div style=\"flex:1;padding:20px;text-align:center;border-right:1px solid #e5eeff\">\n      <div style=\"font-size:12px;color:#757684;text-transform:uppercase;letter-spacing:.05em\">Pengeluaran</div>\n      <div style=\"font-size:20px;font-weight:700;color:#00288e;margin-top:4px\">${fmt(expense)}</div>\n    </div>\n    <div style=\"flex:1;padding:20px;text-align:center\">\n      <div style=\"font-size:12px;color:#757684;text-transform:uppercase;letter-spacing:.05em\">Neto</div>\n      <div style=\"font-size:20px;font-weight:700;color:${net >= 0 ? '#006c49' : '#ba1a1a'};margin-top:4px\">${net >= 0 ? '+' : ''}${fmt(net)}</div>\n    </div>\n  </div>\n\n  <div style=\"padding:24px\">\n    <div style=\"color:#757684;font-size:13px;margin-bottom:16px\">${txCount} transaksi minggu ini</div>\n\n    ${categories.length > 0 ? `\n    <!-- Top Categories -->\n    <h3 style=\"font-size:15px;font-weight:600;color:#0b1c30;margin:0 0 12px\">Kategori Teratas</h3>\n    <table style=\"width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px\">\n      <thead><tr style=\"background:#eff4ff\">\n        <th style=\"padding:8px 12px;text-align:left;font-weight:600;color:#444653\">Kategori</th>\n        <th style=\"padding:8px 12px;text-align:right;font-weight:600;color:#444653\">Total</th>\n        <th style=\"padding:8px 12px;font-weight:600;color:#444653\">Tx</th>\n      </tr></thead>\n      <tbody>${catRows}</tbody>\n    </table>` : ''}\n\n    ${budgetAlerts.length > 0 ? `\n    <!-- Budget Alerts -->\n    <h3 style=\"font-size:15px;font-weight:600;color:#ba1a1a;margin:0 0 12px\">⚠️ Budget Alert</h3>\n    <table style=\"width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px;border:1px solid #ffdad6;border-radius:8px;overflow:hidden\">\n      <thead><tr style=\"background:#ffdad6\">\n        <th style=\"padding:8px 12px;text-align:left\">Kategori</th>\n        <th style=\"padding:8px 12px;text-align:right\">Terpakai / Budget</th>\n        <th style=\"padding:8px 12px\">%</th>\n      </tr></thead>\n      <tbody>${budgetRows}</tbody>\n    </table>` : '<p style=\"color:#006c49;font-size:14px\">✅ Semua budget dalam batas aman minggu ini.</p>'}\n\n    <!-- CTA -->\n    <div style=\"text-align:center;margin-top:24px\">\n      <a href=\"${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard\"\n         style=\"display:inline-block;background:#00288e;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px\">\n        Buka Dashboard →\n      </a>\n    </div>\n  </div>\n\n  <!-- Footer -->\n  <div style=\"background:#f8f9ff;padding:16px 24px;text-align:center;color:#757684;font-size:12px;border-top:1px solid #e5eeff\">\n    FinTrack AI · Laporan otomatis tiap Senin pukul 08:00\n  </div>\n</div>\n</body></html>`;\n\nreturn [{ json: { user_id: user.user_id, email: user.email, name, html, subject: `📊 Laporan Mingguan FinTrack — ${dateRange}` } }];"
+      },
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Build Email HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 360]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-4000-8000-000000000007",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1120, 360],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Monday 8am": { "main": [[{ "node": "Get All Users", "type": "main", "index": 0 }]] },
+    "Get All Users": {
+      "main": [[
+        { "node": "Weekly Totals",  "type": "main", "index": 0 },
+        { "node": "Top Categories", "type": "main", "index": 0 },
+        { "node": "Budget Alerts",  "type": "main", "index": 0 }
+      ]]
+    },
+    "Weekly Totals":  { "main": [[{ "node": "Build Email HTML", "type": "main", "index": 0 }]] },
+    "Top Categories": { "main": [[{ "node": "Build Email HTML", "type": "main", "index": 0 }]] },
+    "Budget Alerts":  { "main": [[{ "node": "Build Email HTML", "type": "main", "index": 0 }]] },
+    "Build Email HTML": { "main": [[{ "node": "Send Email", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "fintrack" }]
+}

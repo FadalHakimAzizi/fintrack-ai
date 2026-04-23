@@ -1,0 +1,261 @@
+{
+  "name": "FinTrack — Gmail Parser",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "labelIds": ["Label_FinTrack"],
+          "readStatus": "unread"
+        },
+        "options": {
+          "downloadAttachments": false
+        }
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e01",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 360],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "email_to",
+              "value": "={{ ($json.to || '').toLowerCase().match(/[\\w.+-]+@[\\w-]+\\.[\\w.-]+/)?.[0] || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "email_from",
+              "value": "={{ ($json.from || '').toLowerCase().match(/[\\w.+-]+@[\\w-]+\\.[\\w.-]+/)?.[0] || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "subject",
+              "value": "={{ $json.subject || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "body_text",
+              "value": "={{ ($json.text || $json.snippet || '').toString().replace(/\\s+/g, ' ').slice(0, 6000) }}",
+              "type": "string"
+            },
+            {
+              "id": "f5",
+              "name": "gmail_message_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e02",
+      "name": "Normalize Email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select user_id from public.user_integrations where channel = 'gmail' and identifier = $1 limit 1;",
+        "options": {
+          "queryReplacement": "={{ $json.email_to }}"
+        }
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e03",
+      "name": "Resolve User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [720, 360],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_SUPABASE_POSTGRES_CREDENTIAL_ID",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.user_id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e04",
+      "name": "Has User?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [960, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "https://fintrack.local" },
+            { "name": "X-Title", "value": "FinTrack AI" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-oss-20b:free', temperature: 0.1, messages: [ { role: 'system', content: 'You extract transaction data from email notifications (bank alerts, e-wallet receipts, invoices, order confirmations, in Indonesian or English). Respond with ONLY a JSON object. No prose, no markdown.\\n\\nSchema:\\n{\\n  \"is_transaction\": boolean,\\n  \"transaction_type\": \"income\" | \"expense\",\\n  \"amount\": number,\\n  \"currency\": string (default \"IDR\"),\\n  \"transaction_date\": string (ISO date YYYY-MM-DD if visible, else null),\\n  \"merchant_name\": string | null,\\n  \"item_name\": string | null,\\n  \"category\": one of [\"Groceries\",\"Dining\",\"Transportation\",\"Utilities\",\"Entertainment\",\"Shopping\",\"Health\",\"Other\",\"Salary\",\"Freelance\",\"Investment\"],\\n  \"payment_method\": string | null,\\n  \"account_name\": string | null,\\n  \"invoice_number\": string | null,\\n  \"notes\": string | null,\\n  \"confidence_score\": number 0..1\\n}\\n\\nRules:\\n- If the email is a newsletter, promo, or not a real transaction, set is_transaction=false and all other fields null/0.\\n- Debit/withdrawal/purchase/payment -> expense. Credit/deposit/refund/payroll -> income.\\n- Amount is positive, no thousand separators.\\n- Return ONLY the JSON object.' }, { role: 'user', content: 'Subject: ' + $('Normalize Email').item.json.subject + '\\nFrom: ' + $('Normalize Email').item.json.email_from + '\\n\\n' + $('Normalize Email').item.json.body_text } ] }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e05",
+      "name": "Call LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 260],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_OPENROUTER_CREDENTIAL_ID",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json?.choices?.[0]?.message?.content || '';\nconst cleaned = raw.replace(/```json\\n?|```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (err) {\n  return [{ json: { _skip: true, _reason: 'Invalid JSON from LLM', raw } }];\n}\n\nif (!parsed.is_transaction || typeof parsed.amount !== 'number' || parsed.amount <= 0 || !parsed.transaction_type) {\n  return [{ json: { _skip: true, _reason: 'Not a transaction', parsed } }];\n}\n\nconst userId = $('Resolve User').first().json.user_id;\nconst msgId = $('Normalize Email').item.json.gmail_message_id;\n\nconst payload = {\n  user_id: userId,\n  transaction_type: parsed.transaction_type,\n  amount: parsed.amount,\n  currency: parsed.currency || 'IDR',\n  transaction_date: parsed.transaction_date || new Date().toISOString().slice(0, 10),\n  merchant_name: parsed.merchant_name || null,\n  item_name: parsed.item_name || null,\n  category: parsed.category || null,\n  payment_method: parsed.payment_method || null,\n  account_name: parsed.account_name || null,\n  invoice_number: parsed.invoice_number || null,\n  notes: parsed.notes || ('Gmail: ' + ($('Normalize Email').item.json.subject || '').slice(0, 120)),\n  source_channel: 'gmail',\n  source_reference: `gmail:${msgId}`,\n  confidence_score: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : 0.7,\n  parsed_status: parsed.confidence_score && parsed.confidence_score >= 0.85 ? 'parsed' : 'pending'\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e06",
+      "name": "Build Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 260]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "false", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e07",
+      "name": "Is Transaction?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1680, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://humorless-broadcast-earthling.ngrok-free.dev/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-webhook-secret", "value": "3a11d13657165da7a3c1b03235bd4a26f4c8f14f5e6cde8ee0347864235e98e4" },
+            { "name": "ngrok-skip-browser-warning", "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e08",
+      "name": "Post to Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 180]
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Normalize Email').item.json.gmail_message_id }}",
+        "labelIds": ["Label_FinTrack_Processed"]
+      },
+      "id": "9b2d5f13-2c0b-4e6a-8e9f-2a3b4c5d6e09",
+      "name": "Label Processed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2160, 180],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [[{ "node": "Normalize Email", "type": "main", "index": 0 }]]
+    },
+    "Normalize Email": {
+      "main": [[{ "node": "Resolve User", "type": "main", "index": 0 }]]
+    },
+    "Resolve User": {
+      "main": [[{ "node": "Has User?", "type": "main", "index": 0 }]]
+    },
+    "Has User?": {
+      "main": [
+        [{ "node": "Call LLM", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Call LLM": {
+      "main": [[{ "node": "Build Payload", "type": "main", "index": 0 }]]
+    },
+    "Build Payload": {
+      "main": [[{ "node": "Is Transaction?", "type": "main", "index": 0 }]]
+    },
+    "Is Transaction?": {
+      "main": [
+        [{ "node": "Post to Website", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Post to Website": {
+      "main": [[{ "node": "Label Processed", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

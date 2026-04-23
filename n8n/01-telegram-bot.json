@@ -1,0 +1,346 @@
+{
+  "name": "FinTrack — Telegram Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {
+          "download": true,
+          "imageSize": "large"
+        }
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e01",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 340],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-is-photo",
+              "leftValue": "={{ Array.isArray($json.message?.photo) && $json.message.photo.length > 0 }}",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e02",
+      "name": "Is Photo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [480, 340]
+    },
+    {
+      "parameters": {
+        "jsCode": "// We're DIRECTLY downstream of Telegram Trigger via Is Photo? (which preserves binary).\nconst meta = $input.first().binary?.data;\nif (!meta) {\n  throw new Error('Telegram Trigger item has no binary.data. Enable additionalFields.download=true.');\n}\nconst mime = meta.mimeType || 'image/jpeg';\n\nlet base64;\ntry {\n  const buffer = await $helpers.getBinaryDataBuffer(0, 'data');\n  base64 = buffer.toString('base64');\n} catch (err) {\n  if (typeof meta.data === 'string' && meta.data.length > 500) {\n    base64 = meta.data;\n  } else {\n    throw new Error('Could not read image binary: ' + (err?.message || 'unknown'));\n  }\n}\n\nreturn [{\n  json: {\n    caption: $json.message.caption || '',\n    chat_id: $json.message.chat.id,\n    message_id: $json.message.message_id,\n    data_url: `data:${mime};base64,${base64}`\n  }\n}];"
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e03",
+      "name": "Photo To Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "https://fintrack.local" },
+            { "name": "X-Title", "value": "FinTrack AI" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'google/gemini-2.0-flash-exp:free', temperature: 0.1, messages: [ { role: 'user', content: [ { type: 'text', text: 'You are a receipt / invoice OCR and data extractor. Read this image (a photo of a receipt or a screenshot of a transaction) and return ONLY a JSON object. No prose, no markdown fences.\\n\\n' + ($json.caption ? 'User caption: \"' + $json.caption + '\"\\n\\n' : '') + 'Schema:\\n{\\n  \"transaction_type\": \"income\" | \"expense\",\\n  \"amount\": number (grand total, no thousand separators),\\n  \"currency\": string (default \"IDR\"),\\n  \"transaction_date\": string (ISO YYYY-MM-DD if visible, else null),\\n  \"merchant_name\": string | null,\\n  \"item_name\": string | null,\\n  \"category\": one of [\"Groceries\",\"Dining\",\"Transportation\",\"Utilities\",\"Entertainment\",\"Shopping\",\"Health\",\"Other\",\"Salary\",\"Freelance\",\"Investment\"],\\n  \"payment_method\": string | null,\\n  \"invoice_number\": string | null,\\n  \"notes\": string | null,\\n  \"confidence_score\": number 0..1\\n}\\n\\nRules:\\n- Most receipts are expenses. Only use \"income\" if clearly a refund/credit note.\\n- amount = grand total after tax/discount\\n- Use caption as hint for category/notes if useful\\n- If you cannot read a field, set it to null\\n- Return ONLY the JSON object.' }, { type: 'image_url', image_url: { url: $json.data_url } } ] } ] }) }}",
+        "options": { "timeout": 90000 }
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e04",
+      "name": "Vision LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_OPENROUTER_CREDENTIAL_ID",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json?.choices?.[0]?.message?.content || '';\nconst cleaned = raw.replace(/```json\\n?|```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (err) {\n  return [{ json: { _error: 'Could not parse vision output', raw } }];\n}\n\nif (typeof parsed.amount !== 'number' || parsed.amount <= 0 || !parsed.transaction_type) {\n  return [{ json: { _error: 'No valid amount detected from photo', parsed } }];\n}\n\nconst ctx = $('Photo To Base64').first().json;\n\nconst payload = {\n  transaction_type: parsed.transaction_type,\n  amount: parsed.amount,\n  currency: parsed.currency || 'IDR',\n  transaction_date: parsed.transaction_date || new Date().toISOString().slice(0, 10),\n  merchant_name: parsed.merchant_name || null,\n  item_name: parsed.item_name || null,\n  category: parsed.category || null,\n  payment_method: parsed.payment_method || null,\n  invoice_number: parsed.invoice_number || null,\n  notes: parsed.notes || ctx.caption || null,\n  source_channel: 'telegram',\n  source_reference: `tg:${ctx.chat_id}:${ctx.message_id}:photo`,\n  confidence_score: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : 0.6,\n  category_confidence: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : null,\n  parsed_status: (parsed.confidence_score && parsed.confidence_score >= 0.8) ? 'parsed' : 'pending'\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e05",
+      "name": "Build Photo Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "https://fintrack.local" },
+            { "name": "X-Title", "value": "FinTrack AI" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-oss-20b:free', messages: [ { role: 'system', content: 'You are a finance data extractor. Extract transaction data from user messages in Indonesian or English. Respond with ONLY a JSON object, no prose, no markdown fences.\\n\\nSchema:\\n{\\n  \"transaction_type\": \"income\" | \"expense\",\\n  \"amount\": number,\\n  \"currency\": string (default \"IDR\"),\\n  \"merchant_name\": string | null,\\n  \"item_name\": string | null,\\n  \"category\": one of [\"Groceries\",\"Dining\",\"Transportation\",\"Utilities\",\"Entertainment\",\"Shopping\",\"Health\",\"Other\",\"Salary\",\"Freelance\",\"Investment\"],\\n  \"payment_method\": string | null,\\n  \"notes\": string | null,\\n  \"confidence_score\": number 0..1\\n}\\n\\nRules:\\n- \"habis\", \"keluar\", \"beli\", \"bayar\" -> expense\\n- \"terima\", \"dapet\", \"gajian\", \"masuk\" -> income\\n- \"rb\" or \"k\" = x1000, \"jt\" = x1_000_000\\n- Amount must be positive number without thousand separators\\n- If ambiguous, lower confidence_score\\n- Never return markdown fences.' }, { role: 'user', content: $json.message.text || '' } ], temperature: 0.1 }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e06",
+      "name": "Call LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 480],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_OPENROUTER_CREDENTIAL_ID",
+          "name": "OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json?.choices?.[0]?.message?.content || '';\nconst cleaned = raw.replace(/```json\\n?|```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (err) {\n  return [{ json: { _error: 'Could not parse LLM output', raw, cleaned } }];\n}\n\nif (!parsed || typeof parsed.amount !== 'number' || !parsed.transaction_type) {\n  return [{ json: { _error: 'LLM output missing required fields', parsed } }];\n}\n\nconst chatId = $('Telegram Trigger').item.json.message.chat.id;\nconst msgId  = $('Telegram Trigger').item.json.message.message_id;\n\nconst payload = {\n  transaction_type: parsed.transaction_type,\n  amount: parsed.amount,\n  currency: parsed.currency || 'IDR',\n  transaction_date: new Date().toISOString().slice(0, 10),\n  merchant_name: parsed.merchant_name || null,\n  item_name: parsed.item_name || null,\n  category: parsed.category || null,\n  payment_method: parsed.payment_method || null,\n  notes: parsed.notes || null,\n  source_channel: 'telegram',\n  source_reference: `tg:${chatId}:${msgId}`,\n  confidence_score: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : 0.7,\n  parsed_status: 'parsed'\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e07",
+      "name": "Build Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-parse-ok",
+              "leftValue": "={{ !$json._error }}",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e08",
+      "name": "Parse OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1440, 340]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select (select user_id from public.user_integrations where channel = 'telegram' and identifier = $1 limit 1) as user_id;",
+        "options": {
+          "queryReplacement": "={{ $('Telegram Trigger').item.json.message.chat.id }}"
+        }
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e09",
+      "name": "Resolve User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1680, 220],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_SUPABASE_POSTGRES_CREDENTIAL_ID",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-user-found",
+              "leftValue": "={{ $json.user_id }}",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e0a",
+      "name": "Has User?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1920, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const user_id = $input.first().json.user_id;\nconst photoPayload = $('Build Photo Payload').first()?.json;\nconst textPayload  = $('Build Payload').first()?.json;\nconst base = (photoPayload && !photoPayload._error) ? photoPayload : textPayload;\nif (!base) throw new Error('No payload to enrich');\nreturn [{ json: { ...base, user_id } }];"
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e0b",
+      "name": "Enrich Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://humorless-broadcast-earthling.ngrok-free.dev/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-webhook-secret", "value": "3a11d13657165da7a3c1b03235bd4a26f4c8f14f5e6cde8ee0347864235e98e4" },
+            { "name": "ngrok-skip-browser-warning", "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e0c",
+      "name": "Post to Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 140]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=✅ Saved: {{ $('Enrich Payload').item.json.transaction_type === 'income' ? '+' : '-' }}{{ Number($('Enrich Payload').item.json.amount).toLocaleString('id-ID') }} {{ $('Enrich Payload').item.json.currency }}\n*{{ $('Enrich Payload').item.json.merchant_name || $('Enrich Payload').item.json.item_name || 'transaction' }}*\nCategory: {{ $('Enrich Payload').item.json.category || '—' }}\nSource: {{ ($('Enrich Payload').item.json.source_reference || '').includes('photo') ? '📷 photo' : '✍ text' }}\nConfidence: {{ Math.round(($('Enrich Payload').item.json.confidence_score || 0) * 100) }}%{{ $('Enrich Payload').item.json.parsed_status === 'pending' ? '\n⚠ Low confidence — please review on the website.' : '' }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e0d",
+      "name": "Reply Success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2640, 140],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=⚠️ Sorry, I couldn't read that.\n\nText example:\n• `habis 50rb di warteg buat makan siang`\n• `gajian 8jt`\n• `bayar listrik 350k`\n\nOr send a clear photo of a receipt.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e0e",
+      "name": "Reply Parse Failed",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1680, 480],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=🔗 Your Telegram account isn't linked yet.\n\nTo link it, open Supabase SQL Editor and run:\n\n```\ninsert into user_integrations (user_id, channel, identifier, label)\nvalues ('<YOUR_AUTH_USER_ID>', 'telegram', '{{ $('Telegram Trigger').item.json.message.chat.id }}', 'My Telegram');\n```\n\nReplace `<YOUR_AUTH_USER_ID>` with your UUID from `auth.users`.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "7a1c4f02-1c0a-4d5a-9d8f-1a2b3c4d5e0f",
+      "name": "Reply Link Needed",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2160, 320],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Is Photo?", "type": "main", "index": 0 }]]
+    },
+    "Is Photo?": {
+      "main": [
+        [{ "node": "Photo To Base64", "type": "main", "index": 0 }],
+        [{ "node": "Call LLM", "type": "main", "index": 0 }]
+      ]
+    },
+    "Photo To Base64": {
+      "main": [[{ "node": "Vision LLM", "type": "main", "index": 0 }]]
+    },
+    "Vision LLM": {
+      "main": [[{ "node": "Build Photo Payload", "type": "main", "index": 0 }]]
+    },
+    "Build Photo Payload": {
+      "main": [[{ "node": "Parse OK?", "type": "main", "index": 0 }]]
+    },
+    "Call LLM": {
+      "main": [[{ "node": "Build Payload", "type": "main", "index": 0 }]]
+    },
+    "Build Payload": {
+      "main": [[{ "node": "Parse OK?", "type": "main", "index": 0 }]]
+    },
+    "Parse OK?": {
+      "main": [
+        [{ "node": "Resolve User", "type": "main", "index": 0 }],
+        [{ "node": "Reply Parse Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Resolve User": {
+      "main": [[{ "node": "Has User?", "type": "main", "index": 0 }]]
+    },
+    "Has User?": {
+      "main": [
+        [{ "node": "Enrich Payload", "type": "main", "index": 0 }],
+        [{ "node": "Reply Link Needed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Enrich Payload": {
+      "main": [[{ "node": "Post to Website", "type": "main", "index": 0 }]]
+    },
+    "Post to Website": {
+      "main": [[{ "node": "Reply Success", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
