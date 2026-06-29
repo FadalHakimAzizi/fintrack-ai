@@ -196,6 +196,11 @@ export function CSVImporter({ defaultCurrency }: { defaultCurrency: string }) {
       const text = e.target?.result as string;
       const { headers: h, rows: r } = parseCSV(text);
       if (h.length === 0) { setError("Gagal membaca CSV. Periksa format file."); return; }
+      if (r.length === 0) { setError("CSV tidak memiliki baris data."); return; }
+      if (r.length > 1000) {
+        setError(`File memiliki ${r.length} baris. Maksimal 1.000 baris per impor — silakan pecah filenya.`);
+        return;
+      }
       setHeaders(h);
       setRawRows(r);
       setMapping(guessMapping(h));
@@ -237,6 +242,19 @@ export function CSVImporter({ defaultCurrency }: { defaultCurrency: string }) {
       return;
     }
     const mapped = applyMapping(headers, rawRows.slice(0, 200), mapping, defaultCurrency);
+    // Sanity-check the mapped values so an alien dataset gets caught here (not
+    // after a failed import): most rows must look like a real date + amount.
+    const valid = mapped.filter((r) => {
+      const d = String(r.transaction_date ?? "");
+      const a = Number(r.amount);
+      return /\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}/.test(d) && Number.isFinite(a) && a > 0;
+    }).length;
+    if (mapped.length >= 4 && valid < mapped.length * 0.5) {
+      setError(
+        "Data tidak terlihat seperti transaksi. Pastikan kolom Tanggal & Jumlah dipetakan ke kolom yang benar.",
+      );
+      return;
+    }
     setPreviewRows(mapped);
     setStep("preview");
     setError(null);

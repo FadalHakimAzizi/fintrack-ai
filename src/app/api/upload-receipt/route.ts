@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_BYTES = 4 * 1024 * 1024;
 const OCR_TIMEOUT_MS = 90_000;
 
 export async function POST(request: Request) {
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     );
   }
   if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "File too large (max 8MB)" }, { status: 400 });
+    return NextResponse.json({ error: "File too large (max 4MB)" }, { status: 400 });
   }
 
   // 1. Upload to Supabase Storage

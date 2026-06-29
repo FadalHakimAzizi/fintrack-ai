@@ -6,6 +6,48 @@ import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+// Downscale + re-encode images in the browser so we upload/store small files
+// (protects storage and speeds OCR). PDFs and files that don't shrink pass
+// through untouched. Best-effort: any failure falls back to the original.
+async function compressImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  try {
+    const dataUrl: string = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+    const img: HTMLImageElement = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = dataUrl;
+    });
+    const MAX = 1600;
+    let w = img.width;
+    let h = img.height;
+    if (Math.max(w, h) > MAX) {
+      const s = MAX / Math.max(w, h);
+      w = Math.round(w * s);
+      h = Math.round(h * s);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(img, 0, 0, w, h);
+    const blob: Blob | null = await new Promise((res) =>
+      canvas.toBlob(res, "image/jpeg", 0.82),
+    );
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 type Phase = "idle" | "uploading" | "ocr" | "done" | "error";
 
 const STEPS: { phase: Phase; label: string; icon: string }[] = [
@@ -23,17 +65,25 @@ export function ReceiptUploadFlow() {
   const [parsedPreview, setParsedPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  async function handleFile(file: File) {
-    if (file.size > 8 * 1024 * 1024) {
+  async function handleFile(raw: File) {
+    // Sanity ceiling on the ORIGINAL so we never try to decode an absurd file.
+    if (raw.size > 20 * 1024 * 1024) {
       setPhase("error");
-      setError("File terlalu besar (maks 8MB).");
+      setError("File terlalu besar (maks 20MB).");
       return;
     }
-    setFileName(file.name);
+    setFileName(raw.name);
     setError(null);
     setParsedPreview(null);
-
     setPhase("uploading");
+
+    // Compress images client-side, then cap the uploaded file at 4MB.
+    const file = await compressImage(raw);
+    if (file.size > 4 * 1024 * 1024) {
+      setPhase("error");
+      setError("File masih lebih dari 4MB setelah dikompres. Coba foto resolusi lebih rendah atau PDF lebih kecil.");
+      return;
+    }
     const fd = new FormData();
     fd.append("file", file);
 
@@ -132,7 +182,7 @@ export function ReceiptUploadFlow() {
               {ext}
             </span>
           ))}
-          <span className="text-label-caps uppercase tracking-wider text-outline">maks 8MB</span>
+          <span className="text-label-caps uppercase tracking-wider text-outline">dikompres otomatis · maks 4MB</span>
         </div>
       </div>
     );
