@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { TxRow } from "@/components/transactions/tx-row";
 import { SemanticSearch } from "@/components/transactions/semantic-search";
+import { ExportDialog } from "@/components/transactions/export-dialog";
 import { TransactionFilters } from "@/components/transactions/transaction-filters";
 import { Pagination } from "@/components/transactions/pagination";
 import type { Transaction } from "@/lib/types";
@@ -87,7 +88,6 @@ export default async function TransactionsPage({
     ([k, v]) => v && k !== "page",
   ) as [string, string][];
   const paramsRecord = Object.fromEntries(filterEntries);
-  const exportUrl = "/api/export?" + new URLSearchParams(paramsRecord).toString();
 
   const removeHref = (key: string) => {
     const sp = new URLSearchParams(paramsRecord);
@@ -123,7 +123,15 @@ export default async function TransactionsPage({
         subtitle="Semua catatan pemasukan dan pengeluaran"
         action={
           <div className="flex items-center gap-1.5">
-            <NavAction href={exportUrl} icon="download" label="Ekspor" external />
+            <ExportDialog
+              categoryNames={categoryNames}
+              defaults={{
+                from: searchParams.from,
+                to: searchParams.to,
+                type: searchParams.type,
+                category: searchParams.category,
+              }}
+            />
             <NavAction href="/transactions/import" icon="upload_file" label="Impor" />
             <NavAction href="/transactions/upload" icon="photo_camera" label="Struk" />
             <Link href="/transactions/new">
