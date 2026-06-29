@@ -14,6 +14,7 @@ export default async function ImportPage() {
   return (
     <>
       <TopBar
+        back="/transactions"
         title="Impor Transaksi"
         subtitle="Impor massal dari CSV atau ekspor rekening koran"
       />

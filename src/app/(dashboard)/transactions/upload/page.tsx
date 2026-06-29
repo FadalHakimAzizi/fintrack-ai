@@ -23,7 +23,7 @@ const TONE: Record<string, string> = {
 export default function UploadReceiptPage() {
   return (
     <>
-      <TopBar title="Unggah Struk" subtitle="Foto struk, kami baca dan catat otomatis" />
+      <TopBar back="/transactions" title="Unggah Struk" subtitle="Foto struk, kami baca dan catat otomatis" />
       <div className="flex-1 overflow-y-auto max-w-container mx-auto w-full p-6 md:p-8">
         <div className="mx-auto max-w-2xl space-y-6">
           <Card className="animate-fade-up">

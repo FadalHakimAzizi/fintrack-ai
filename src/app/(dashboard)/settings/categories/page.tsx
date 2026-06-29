@@ -17,6 +17,7 @@ export default async function CategoriesPage() {
   return (
     <>
       <TopBar
+        back="/settings"
         title="Kategori"
         subtitle="Kelola kategori pemasukan dan pengeluaran Anda"
       />

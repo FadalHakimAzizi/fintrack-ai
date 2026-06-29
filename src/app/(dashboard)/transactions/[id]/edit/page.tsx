@@ -19,6 +19,7 @@ export default async function EditTransactionPage({ params }: { params: { id: st
   return (
     <>
       <TopBar
+        back={`/transactions/${params.id}`}
         title="Edit Transaksi"
         subtitle={tx.merchant_name || tx.item_name || "Transaksi"}
       />
