@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { embedAndStoreTransaction } from "@/lib/embeddings";
 
 const TransactionInput = z.object({
   transaction_type: z.enum(["income", "expense"]),
@@ -88,6 +89,18 @@ export async function createTransaction(formData: FormData) {
     return { ok: false, error: error.message };
   }
 
+  await embedAndStoreTransaction(supabase, data.id, {
+    transaction_type: v.transaction_type,
+    amount: v.amount,
+    currency: v.currency || "IDR",
+    transaction_date: v.transaction_date,
+    merchant_name: emptyToNull(v.merchant_name),
+    item_name: emptyToNull(v.item_name),
+    category: emptyToNull(v.category),
+    payment_method: emptyToNull(v.payment_method),
+    notes: emptyToNull(v.notes),
+  });
+
   revalidatePath("/dashboard");
   revalidatePath("/transactions");
   redirect(`/transactions/${data.id}`);
@@ -139,6 +152,19 @@ export async function updateTransaction(id: string, formData: FormData) {
     .eq("user_id", user.id);
 
   if (error) return { ok: false, error: error.message };
+
+  // Re-index: edited fields change the semantic meaning.
+  await embedAndStoreTransaction(supabase, id, {
+    transaction_type: v.transaction_type,
+    amount: v.amount,
+    currency: v.currency || "IDR",
+    transaction_date: v.transaction_date,
+    merchant_name: emptyToNull(v.merchant_name),
+    item_name: emptyToNull(v.item_name),
+    category: emptyToNull(v.category),
+    payment_method: emptyToNull(v.payment_method),
+    notes: emptyToNull(v.notes),
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/transactions");

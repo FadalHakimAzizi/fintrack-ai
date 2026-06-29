@@ -567,25 +567,137 @@
     --on-secondary-fixed-variant:41  57  68;
   }
 
+  /* ═══════════════════════════════════════════════════
+     ELEVATION — theme-aware layered shadows
+     Soft, multi-layer shadows read more premium than a
+     single flat drop. Defined as vars so dark mode can use
+     deeper, more opaque shadows (black drops vanish on dark).
+  ═══════════════════════════════════════════════════ */
+  :root {
+    --shadow-xs:         0 1px 2px rgb(16 24 40 / 0.05);
+    --shadow-card:       0 1px 2px rgb(16 24 40 / 0.04), 0 6px 16px rgb(16 24 40 / 0.06);
+    --shadow-card-hover: 0 2px 4px rgb(16 24 40 / 0.05), 0 14px 32px rgb(16 24 40 / 0.10);
+    --shadow-elevated:   0 4px 8px rgb(16 24 40 / 0.06), 0 24px 48px rgb(16 24 40 / 0.14);
+  }
+  html.dark {
+    --shadow-xs:         0 1px 2px rgb(0 0 0 / 0.30);
+    --shadow-card:       0 1px 2px rgb(0 0 0 / 0.30), 0 6px 18px rgb(0 0 0 / 0.42);
+    --shadow-card-hover: 0 2px 6px rgb(0 0 0 / 0.35), 0 18px 38px rgb(0 0 0 / 0.55);
+    --shadow-elevated:   0 4px 12px rgb(0 0 0 / 0.40), 0 28px 56px rgb(0 0 0 / 0.62);
+  }
+
   /* ─── base styles ─── */
   html, body {
     @apply bg-background text-on-background;
     font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Ambient depth — faint, theme-tinted glow anchored to the corners.
+     Sits behind everything; adds richness without touching layout. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(1100px 560px at 100% -8%, rgb(var(--surface-tint) / 0.07), transparent 62%),
+      radial-gradient(900px 480px at -8% 108%, rgb(var(--surface-tint) / 0.05), transparent 60%);
   }
   h1, h2, h3, .font-display {
     font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
   }
   .tabular { font-variant-numeric: tabular-nums; }
+
+  /* Slim, theme-aware scrollbars app-wide (the sidebar opts out via
+     .no-scrollbar, which is more specific and wins). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--outline-variant)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--outline-variant));
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--outline));
+  }
 }
 
 @layer components {
-  .focus-ring:focus {
+  .focus-ring:focus-visible {
     outline: none;
     border-color: rgb(var(--primary));
-    box-shadow: 0 0 0 3px rgb(var(--primary) / 0.15);
+    box-shadow: 0 0 0 3px rgb(var(--primary) / 0.18);
   }
   .card {
     @apply bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/30;
+  }
+  /* Opt-in: lifts the surface toward the pointer with a deeper shadow.
+     Pairs with shadow-card so the resting/hover states share a language. */
+  .card-interactive {
+    @apply transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-card-hover;
+  }
+  /* Hairline top highlight — the classic "premium surface" cue. */
+  .surface-sheen {
+    position: relative;
+  }
+  .surface-sheen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.05), transparent 40%);
+  }
+  /* Entrance animation — a gentle fade + rise. Pair with an inline
+     animation-delay to cascade a group of cards. Reduced-motion is honored
+     globally (see the @media block at the bottom of this file). */
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .animate-fade-up {
+    animation: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Animated bar grow — used by the category breakdown bars. */
+  @keyframes bar-grow {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  .animate-bar-grow {
+    transform-origin: left;
+    animation: bar-grow 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Hide scrollbar but keep scrolling (used for the sidebar nav rail). */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
   .material-symbols-outlined {
     font-family: "Material Symbols Outlined";
@@ -602,5 +714,17 @@
     -webkit-font-feature-settings: "liga";
     -webkit-font-smoothing: antialiased;
     font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  }
+}
+
+/* Accessibility — honor the user's reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

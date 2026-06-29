@@ -1,5 +1,33 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// Our Tailwind theme defines custom font-size tokens (text-body-sm, text-h2, …).
+// tailwind-merge's defaults don't know these are FONT SIZES, so it treats e.g.
+// `text-body-sm` as a text COLOR. That made it drop real colors like
+// `text-on-primary` whenever a size + color appeared together (every Button),
+// leaving buttons with dark inherited text on dark backgrounds. Registering the
+// tokens under the font-size group fixes the misclassification.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [
+        {
+          text: [
+            "display",
+            "h1",
+            "h2",
+            "h3",
+            "body-lg",
+            "body-md",
+            "body-sm",
+            "label-caps",
+            "numeric",
+          ],
+        },
+      ],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

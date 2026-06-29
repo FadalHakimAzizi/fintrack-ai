@@ -7,10 +7,10 @@ export default function AiPage() {
   return (
     <>
       <TopBar
-        title="AI Advisor"
-        subtitle="Ask anything about your transactions in the last 90 days"
+        title="Asisten AI"
+        subtitle="Tanya apa saja — menganalisis seluruh riwayat transaksi Anda"
       />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <ChatPanel />
       </div>
     </>

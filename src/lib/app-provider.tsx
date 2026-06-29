@@ -8,7 +8,9 @@ interface AppCtx {
   theme: ThemeName;
   mode: Mode;
   sidebarOpen: boolean;
+  collapsed: boolean;
   setSidebarOpen: (v: boolean) => void;
+  toggleCollapsed: () => void;
   setLocale: (l: Locale) => void;
   setTheme: (t: ThemeName) => void;
   setMode: (m: Mode) => void;
@@ -17,9 +19,9 @@ interface AppCtx {
 }
 
 const AppContext = createContext<AppCtx>({
-  locale: "id", theme: "ocean", mode: "light", sidebarOpen: false,
+  locale: "id", theme: "ocean", mode: "light", sidebarOpen: false, collapsed: false,
   setLocale: () => {}, setTheme: () => {}, setMode: () => {}, toggleMode: () => {},
-  setSidebarOpen: () => {}, t: (p) => p,
+  setSidebarOpen: () => {}, toggleCollapsed: () => {}, t: (p) => p,
 });
 
 function applyToDOM(locale: Locale, theme: ThemeName, mode: Mode) {
@@ -38,14 +40,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeName>("ocean");
   const [mode, setModeState] = useState<Mode>("light");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     const l = (localStorage.getItem("locale") as Locale) || "id";
     const t = (localStorage.getItem("theme") as ThemeName) || "ocean";
     const m = (localStorage.getItem("mode") as Mode) || "light";
-    setLocaleState(l); setThemeState(t); setModeState(m);
+    const c = localStorage.getItem("sidebarCollapsed") === "true";
+    setLocaleState(l); setThemeState(t); setModeState(m); setCollapsed(c);
     applyToDOM(l, t, m);
+    document.documentElement.style.setProperty("--sidebar-w", c ? "5rem" : "16rem");
   }, []);
+
+  const toggleCollapsed = () => {
+    const v = !collapsed;
+    setCollapsed(v);
+    localStorage.setItem("sidebarCollapsed", String(v));
+    document.documentElement.style.setProperty("--sidebar-w", v ? "5rem" : "16rem");
+  };
 
   const setLocale = (l: Locale) => {
     setLocaleState(l);
@@ -67,7 +79,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const t = (path: string) => getTranslation(locale, path);
 
   return (
-    <AppContext.Provider value={{ locale, theme, mode, sidebarOpen, setSidebarOpen, setLocale, setTheme, setMode, toggleMode, t }}>
+    <AppContext.Provider value={{ locale, theme, mode, sidebarOpen, collapsed, setSidebarOpen, toggleCollapsed, setLocale, setTheme, setMode, toggleMode, t }}>
       {children}
     </AppContext.Provider>
   );

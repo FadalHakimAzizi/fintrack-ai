@@ -14,36 +14,47 @@ export default async function ImportPage() {
   return (
     <>
       <TopBar
-        title="Import Transactions"
-        subtitle="Bulk import from CSV or bank statement export"
+        title="Impor Transaksi"
+        subtitle="Impor massal dari CSV atau ekspor rekening koran"
       />
-      <div className="flex-1 p-8 overflow-y-auto max-w-container mx-auto w-full">
-        <div className="max-w-3xl mx-auto space-y-6">
-          <Card>
+      <div className="flex-1 overflow-y-auto max-w-container mx-auto w-full p-6 md:p-8">
+        <div className="mx-auto max-w-3xl space-y-6">
+          <Card className="animate-fade-up">
             <CardHeader
-              title="Import from CSV"
-              subtitle="Upload a CSV file and map columns to transaction fields"
+              icon="upload_file"
+              title="Impor dari CSV"
+              subtitle="Unggah file CSV dan petakan kolom ke field transaksi"
             />
             <CSVImporter defaultCurrency={currency} />
           </Card>
 
-          <Card>
-            <CardHeader title="Supported Formats" />
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <Card className="animate-fade-up">
+            <CardHeader
+              icon="account_balance"
+              iconTone="secondary"
+              title="Format yang Didukung"
+              subtitle="Ekspor dari bank/e-wallet populer atau CSV kustom"
+            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
-                { name: "BCA", hint: "Internet Banking → Mutasi Rekening → Export CSV" },
-                { name: "Mandiri", hint: "Mandiri Online → Rekening → Unduh Mutasi" },
-                { name: "GoPay", hint: "Gopay History → Export (CSV)" },
-                { name: "OVO", hint: "OVO → Riwayat → Export" },
-                { name: "Dana", hint: "Dana → Riwayat Transaksi → Unduh" },
-                { name: "Custom CSV", hint: "Any CSV with headers: date, amount, type, merchant" },
+                { name: "BCA", icon: "account_balance", hint: "Internet Banking → Mutasi Rekening → Export CSV" },
+                { name: "Mandiri", icon: "account_balance", hint: "Mandiri Online → Rekening → Unduh Mutasi" },
+                { name: "GoPay", icon: "wallet", hint: "GoPay History → Export (CSV)" },
+                { name: "OVO", icon: "wallet", hint: "OVO → Riwayat → Export" },
+                { name: "Dana", icon: "wallet", hint: "Dana → Riwayat Transaksi → Unduh" },
+                { name: "CSV Kustom", icon: "description", hint: "CSV apa pun dengan header: date, amount, type, merchant" },
               ].map((fmt) => (
-                <div key={fmt.name} className="p-3 rounded-lg bg-surface-container border border-outline-variant/30">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon name="description" />
-                    <span className="text-body-sm font-semibold text-on-surface">{fmt.name}</span>
+                <div
+                  key={fmt.name}
+                  className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-3.5 transition-colors hover:bg-surface-container-low"
+                >
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/12 text-primary">
+                      <Icon name={fmt.icon} filled className="text-[18px]" />
+                    </span>
+                    <span className="font-semibold text-on-surface">{fmt.name}</span>
                   </div>
-                  <p className="text-label-caps text-outline">{fmt.hint}</p>
+                  <p className="text-body-sm text-on-surface-variant">{fmt.hint}</p>
                 </div>
               ))}
             </div>

@@ -6,6 +6,8 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createCategory, deleteCategory } from "@/app/(dashboard)/settings/categories/actions";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import type { Category } from "@/lib/types";
 
 const PRESET_COLORS = [
@@ -20,6 +22,8 @@ const PRESET_ICONS = [
 ];
 
 export function CategoryManager({ categories }: { categories: Category[] }) {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<"expense" | "income">("expense");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -46,72 +50,110 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
     }
   }
 
-  async function onDelete(id: string, name: string) {
-    if (!confirm(`Delete category "${name}"? This won't delete existing transactions.`)) return;
-    const result = await deleteCategory(id);
-    if (!result.ok) alert(result.error);
+  async function restore(cat: Category) {
+    const fd = new FormData();
+    fd.set("name", cat.name);
+    fd.set("kind", cat.kind);
+    if (cat.color) fd.set("color", cat.color);
+    if (cat.icon) fd.set("icon", cat.icon);
+    await createCategory(fd);
   }
+
+  async function onDelete(cat: Category) {
+    const ok = await confirm({
+      title: `Hapus kategori "${cat.name}"?`,
+      description: "Transaksi yang sudah ada tidak akan ikut terhapus.",
+      confirmLabel: "Hapus",
+      tone: "danger",
+    });
+    if (!ok) return;
+    const result = await deleteCategory(cat.id);
+    if (!result.ok) {
+      toast({ message: result.error || "Gagal menghapus kategori", tone: "error" });
+      return;
+    }
+    toast({
+      message: `Kategori "${cat.name}" dihapus`,
+      tone: "success",
+      action: { label: "Urungkan", onClick: () => restore(cat) },
+    });
+  }
+
+  const expenseCount = categories.filter((c) => c.kind === "expense").length;
+  const incomeCount = categories.filter((c) => c.kind === "income").length;
+  const tabLabel = activeTab === "expense" ? "pengeluaran" : "pemasukan";
 
   return (
     <div className="space-y-6">
-      <div className="flex p-1 bg-surface-container rounded-lg w-full max-w-xs">
+      <div className="flex w-full max-w-sm rounded-xl bg-surface-container p-1">
         {(["expense", "income"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={cn(
-              "flex-1 py-2 text-center text-body-md font-medium rounded-md capitalize transition-colors",
+              "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-body-md font-medium transition-colors",
               activeTab === tab
-                ? "bg-surface-container-lowest shadow-sm text-on-surface"
+                ? "bg-surface-container-lowest text-on-surface shadow-sm"
                 : "text-on-surface-variant hover:text-on-surface",
             )}
           >
-            {tab}
+            <Icon name={tab === "expense" ? "trending_down" : "trending_up"} className="text-[18px]" />
+            {tab === "expense" ? "Pengeluaran" : "Pemasukan"}
+            <span className="rounded-full bg-surface-container px-1.5 py-0.5 text-label-caps tabular text-on-surface-variant">
+              {tab === "expense" ? expenseCount : incomeCount}
+            </span>
           </button>
         ))}
       </div>
 
       <div className="space-y-2">
-        {filtered.map((cat) => (
-          <div
-            key={cat.id}
-            className="flex items-center gap-3 p-3 rounded-lg border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors"
-          >
+        {filtered.map((cat) => {
+          const color = cat.color || "#3755c3";
+          return (
             <div
-              className="w-9 h-9 rounded-full grid place-items-center shrink-0"
-              style={{ backgroundColor: cat.color || "#e5eeff", color: cat.color ? "#fff" : "var(--primary)" }}
+              key={cat.id}
+              className="group flex items-center gap-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low"
             >
-              <Icon name={cat.icon || "label"} filled />
+              <span
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ring-inset ring-black/[0.04]"
+                style={{ backgroundColor: `${color}1f`, color }}
+              >
+                <Icon name={cat.icon || "label"} filled />
+              </span>
+              <span className="flex-1 truncate font-medium text-on-surface">{cat.name}</span>
+              <button
+                onClick={() => onDelete(cat)}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-on-surface-variant/50 transition-colors hover:bg-error-container hover:text-error"
+                title="Hapus kategori"
+                aria-label={`Hapus kategori ${cat.name}`}
+              >
+                <Icon name="delete" className="text-[20px]" />
+              </button>
             </div>
-            <span className="text-body-md text-on-surface flex-1">{cat.name}</span>
-            <button
-              onClick={() => onDelete(cat.id, cat.name)}
-              className="w-8 h-8 rounded-full grid place-items-center text-outline hover:text-error hover:bg-error-container transition-colors"
-              title="Delete category"
-            >
-              <Icon name="delete" />
-            </button>
-          </div>
-        ))}
+          );
+        })}
 
         {filtered.length === 0 && (
-          <p className="text-body-sm text-outline py-4 text-center">
-            No {activeTab} categories yet.
-          </p>
+          <div className="rounded-xl border border-dashed border-outline-variant/70 py-8 text-center">
+            <p className="text-body-sm text-on-surface-variant">
+              Belum ada kategori {tabLabel}.
+            </p>
+          </div>
         )}
       </div>
 
       {!showForm ? (
         <Button variant="ghost" onClick={() => setShowForm(true)}>
           <Icon name="add" />
-          Add {activeTab} category
+          Tambah kategori {tabLabel}
         </Button>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-4 p-4 border border-outline-variant/40 rounded-xl bg-surface-container-low">
-          <h4 className="text-body-md font-semibold text-on-surface">New {activeTab} category</h4>
+        <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-outline-variant/40 bg-surface-container-low p-4">
+          <h4 className="font-semibold text-on-surface">Kategori {tabLabel} baru</h4>
 
           {error && (
-            <div className="p-3 rounded-lg bg-error-container text-on-error-container text-body-sm">
+            <div className="flex items-center gap-2 rounded-lg bg-error-container p-3 text-body-sm text-on-error-container">
+              <Icon name="error" filled />
               {error}
             </div>
           )}
@@ -119,22 +161,23 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
           <input type="hidden" name="kind" value={activeTab} />
 
           <div>
-            <Label htmlFor="cat-name">Name</Label>
-            <Input id="cat-name" name="name" required placeholder="e.g. Travel, Rent..." />
+            <Label htmlFor="cat-name">Nama</Label>
+            <Input id="cat-name" name="name" required placeholder="mis. Liburan, Sewa…" />
           </div>
 
           <div>
-            <Label>Color</Label>
-            <div className="flex flex-wrap gap-2 mt-1">
+            <Label>Warna</Label>
+            <div className="mt-1 flex flex-wrap gap-2">
               {PRESET_COLORS.map((c) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setSelectedColor(c)}
-                  className="w-8 h-8 rounded-full border-2 transition-all"
+                  aria-label={`Warna ${c}`}
+                  className="h-8 w-8 rounded-full border-2 transition-all"
                   style={{
                     backgroundColor: c,
-                    borderColor: selectedColor === c ? "var(--on-surface)" : "transparent",
+                    borderColor: selectedColor === c ? "rgb(var(--on-surface))" : "transparent",
                   }}
                 />
               ))}
@@ -142,15 +185,16 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
           </div>
 
           <div>
-            <Label>Icon</Label>
-            <div className="flex flex-wrap gap-2 mt-1">
+            <Label>Ikon</Label>
+            <div className="mt-1 flex flex-wrap gap-2">
               {PRESET_ICONS.map((ic) => (
                 <button
                   key={ic}
                   type="button"
                   onClick={() => setSelectedIcon(ic)}
+                  aria-label={`Ikon ${ic}`}
                   className={cn(
-                    "w-9 h-9 rounded-lg grid place-items-center transition-colors",
+                    "grid h-9 w-9 place-items-center rounded-lg transition-colors",
                     selectedIcon === ic
                       ? "bg-primary text-on-primary"
                       : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high",
@@ -162,12 +206,24 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
             </div>
           </div>
 
+          {/* Live preview */}
+          <div className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2">
+            <span className="text-label-caps uppercase tracking-wider text-on-surface-variant">Pratinjau</span>
+            <span
+              className="grid h-8 w-8 place-items-center rounded-lg"
+              style={{ backgroundColor: `${selectedColor}1f`, color: selectedColor }}
+            >
+              <Icon name={selectedIcon} filled className="text-[18px]" />
+            </span>
+          </div>
+
           <div className="flex gap-3">
             <Button type="submit" variant="primary" disabled={submitting}>
-              {submitting ? "Saving..." : "Save"}
+              <Icon name={submitting ? "progress_activity" : "save"} className={submitting ? "animate-spin" : ""} />
+              {submitting ? "Menyimpan…" : "Simpan"}
             </Button>
             <Button type="button" variant="ghost" onClick={() => { setShowForm(false); setError(null); }}>
-              Cancel
+              Batal
             </Button>
           </div>
         </form>

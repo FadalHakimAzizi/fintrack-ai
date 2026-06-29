@@ -6,8 +6,8 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     <input
       ref={ref}
       className={cn(
-        "w-full px-4 py-3 border border-outline-variant rounded-lg text-body-md bg-surface-container-lowest text-on-surface",
-        "focus-ring transition-all placeholder:text-outline/60",
+        "w-full px-4 py-3 border border-outline-variant rounded-xl text-body-md bg-surface-container-lowest text-on-surface",
+        "hover:border-outline focus-ring transition-all placeholder:text-outline/60",
         className,
       )}
       {...props}
@@ -23,7 +23,7 @@ export const Textarea = React.forwardRef<
   <textarea
     ref={ref}
     className={cn(
-      "w-full px-4 py-3 border border-outline-variant rounded-lg text-body-md bg-surface-container-lowest text-on-surface",
+      "w-full px-4 py-3 border border-outline-variant rounded-xl text-body-md bg-surface-container-lowest text-on-surface",
       "focus-ring transition-all placeholder:text-outline/60 resize-none",
       className,
     )}
@@ -39,9 +39,9 @@ export const Select = React.forwardRef<
   <select
     ref={ref}
     className={cn(
-      "w-full px-4 py-3 border border-outline-variant rounded-lg text-body-md bg-surface-container-lowest text-on-surface",
-      "focus-ring transition-all appearance-none pr-10",
-      "bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2020%2020%27%20fill=%27%23888%27%3e%3cpath%20d=%27M5.23%207.21a.75.75%200%20011.06.02L10%2011.06l3.71-3.83a.75.75%200%20111.08%201.04l-4.25%204.39a.75.75%200%2001-1.08%200L5.21%208.27a.75.75%200%2001.02-1.06z%27/%3e%3c/svg%3e')] bg-no-repeat bg-[right_1rem_center]",
+      "w-full px-4 py-3 border border-outline-variant rounded-xl text-body-md bg-surface-container-lowest text-on-surface",
+      "hover:border-outline focus-ring transition-all appearance-none pr-10",
+      "bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2020%2020%27%20fill=%27%23888%27%3e%3cpath%20d=%27M5.23%207.21a.75.75%200%20011.06.02L10%2011.06l3.71-3.83a.75.75%200%20111.08%201.04l-4.25%204.39a.75.75%200%2001-1.08%200L5.21%208.27a.75.75%200%2001.02-1.06z%27/%3e%3c/svg%3e')] bg-no-repeat bg-[right_0.85rem_center] bg-[length:1.15rem_1.15rem]",
       className,
     )}
     {...props}

@@ -34,7 +34,7 @@ export function BudgetForm({ categories, defaultCurrency, defaultMonth }: Props)
     return (
       <Button size="sm" onClick={() => setOpen(true)}>
         <Icon name="add" />
-        New Budget
+        Anggaran Baru
       </Button>
     );
   }
@@ -42,16 +42,17 @@ export function BudgetForm({ categories, defaultCurrency, defaultMonth }: Props)
   return (
     <form id="budget-form" action={onSubmit} className="space-y-4">
       {error ? (
-        <div className="p-3 rounded-lg bg-error-container text-on-error-container text-body-sm">
+        <div className="flex items-center gap-2 rounded-lg bg-error-container p-3 text-body-sm text-on-error-container">
+          <Icon name="error" filled />
           {error}
         </div>
       ) : null}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div>
-          <Label htmlFor="b-category">Category</Label>
+          <Label htmlFor="b-category">Kategori</Label>
           <Select id="b-category" name="category" defaultValue="" required>
             <option value="" disabled>
-              Select category...
+              Pilih kategori…
             </option>
             {categories.map((c) => (
               <option key={c} value={c}>
@@ -61,17 +62,11 @@ export function BudgetForm({ categories, defaultCurrency, defaultMonth }: Props)
           </Select>
         </div>
         <div>
-          <Label htmlFor="b-month">Month</Label>
-          <Input
-            id="b-month"
-            name="month"
-            type="month"
-            defaultValue={defaultMonth}
-            required
-          />
+          <Label htmlFor="b-month">Bulan</Label>
+          <Input id="b-month" name="month" type="month" defaultValue={defaultMonth} required />
         </div>
         <div>
-          <Label htmlFor="b-amount">Target Amount</Label>
+          <Label htmlFor="b-amount">Target (jumlah)</Label>
           <Input
             id="b-amount"
             name="amount"
@@ -84,16 +79,17 @@ export function BudgetForm({ categories, defaultCurrency, defaultMonth }: Props)
         </div>
       </div>
       <div>
-        <Label htmlFor="b-notes">Notes (optional)</Label>
+        <Label htmlFor="b-notes">Catatan (opsional)</Label>
         <Textarea id="b-notes" name="notes" rows={2} />
       </div>
       <input type="hidden" name="currency" value={defaultCurrency} />
-      <div className="flex items-center gap-2 justify-end">
+      <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          Batal
         </Button>
         <Button type="submit" variant="secondary" disabled={submitting}>
-          {submitting ? "Saving..." : "Save Budget"}
+          <Icon name={submitting ? "progress_activity" : "save"} className={submitting ? "animate-spin" : ""} />
+          {submitting ? "Menyimpan…" : "Simpan Anggaran"}
         </Button>
       </div>
     </form>

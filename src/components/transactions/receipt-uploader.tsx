@@ -95,10 +95,10 @@ export function ReceiptUploader({
       {status === "idle" ? (
         <>
           <p className="text-body-md text-on-surface font-medium mb-1">
-            Drag and drop file here
+            Seret & taruh file di sini
           </p>
           <p className="text-body-sm text-outline mb-4">
-            or click to browse from your computer
+            or klik untuk pilih file from your computer
           </p>
           <span className="text-label-caps text-outline">
             JPG, PNG, PDF · max 5MB

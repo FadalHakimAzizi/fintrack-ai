@@ -1,32 +1,37 @@
 import { createClient } from "@/lib/supabase/server";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Icon } from "@/components/ui/icon";
-import { LineChart, LineChartLegend } from "@/components/charts/line-chart";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { TrendChart } from "@/components/dashboard/trend-chart";
 import { HorizontalBars, VerticalBars } from "@/components/charts/bar-chart";
 import { InsightsList } from "@/components/dashboard/insights-list";
+import { RecurringList } from "@/components/analytics/recurring-list";
 import {
   computeInsights,
   detectRecurring,
   dayOfWeekPattern,
   monthlyTrend,
 } from "@/lib/insights";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import type { Transaction } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+const DOW_SHORT = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+const DOW_FULL = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
+
 export default async function AnalyticsPage() {
   const supabase = createClient();
 
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  sixMonthsAgo.setDate(1);
+  // A full year powers the 6-month / 1-year toggle and richer pattern detection.
+  const yearAgo = new Date();
+  yearAgo.setMonth(yearAgo.getMonth() - 12);
+  yearAgo.setDate(1);
 
   const { data: rows } = await supabase
     .from("transactions")
     .select("*")
-    .gte("transaction_date", sixMonthsAgo.toISOString().slice(0, 10))
+    .gte("transaction_date", yearAgo.toISOString().slice(0, 10))
     .order("transaction_date", { ascending: false });
 
   const { data: profile } = await supabase.from("profiles").select("currency").single();
@@ -34,9 +39,20 @@ export default async function AnalyticsPage() {
 
   const transactions = (rows || []) as Transaction[];
   const insights = computeInsights(transactions, { currency });
-  const trend = monthlyTrend(transactions, 6);
+  const trend = monthlyTrend(transactions, 12);
   const dow = dayOfWeekPattern(transactions);
   const recurring = detectRecurring(transactions);
+
+  // KPIs over the 12-month window
+  const totalIncome = trend.income.reduce((s, v) => s + v, 0);
+  const totalExpense = trend.expense.reduce((s, v) => s + v, 0);
+  const net = totalIncome - totalExpense;
+  const netSeries = trend.income.map((v, i) => v - trend.expense[i]);
+  const savingsRate = totalIncome > 0 ? (net / totalIncome) * 100 : 0;
+
+  // Day-of-week highlight
+  const dowMax = Math.max(...dow, 0);
+  const busiestDow = dowMax > 0 ? DOW_FULL[dow.indexOf(dowMax)] : null;
 
   // Top categories (90 days)
   const ninetyDaysAgo = new Date();
@@ -68,101 +84,97 @@ export default async function AnalyticsPage() {
     .slice(0, 8)
     .map(([label, value]) => ({ label, value }));
 
-  const dowLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
   return (
     <>
-      <TopBar title="Analytics" subtitle="Trends and insights from your transactions" />
+      <TopBar title="Analitik" subtitle="Tren dan wawasan dari transaksi Anda" />
 
-      <div className="flex-1 p-8 overflow-y-auto max-w-container mx-auto w-full space-y-6">
+      <div className="flex-1 overflow-y-auto max-w-container mx-auto w-full space-y-6 p-6 md:p-8">
+        {/* KPI strip — 12-month summary */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="animate-fade-up" style={{ animationDelay: "0ms" }}>
+            <StatCard
+              label="Pemasukan"
+              value={formatCurrency(totalIncome, currency)}
+              icon="trending_up"
+              tone="secondary"
+              spark={{ values: trend.income, color: "#0d9488" }}
+              caption="12 bulan terakhir"
+            />
+          </div>
+          <div className="animate-fade-up" style={{ animationDelay: "60ms" }}>
+            <StatCard
+              label="Pengeluaran"
+              value={formatCurrency(totalExpense, currency)}
+              icon="trending_down"
+              tone="tertiary"
+              spark={{ values: trend.expense, color: "#d97706" }}
+              caption="12 bulan terakhir"
+            />
+          </div>
+          <div className="animate-fade-up" style={{ animationDelay: "120ms" }}>
+            <StatCard
+              label="Tabungan Bersih"
+              value={formatCurrency(net, currency)}
+              icon="account_balance"
+              tone={net >= 0 ? "primary" : "error"}
+              spark={{ values: netSeries, color: net >= 0 ? "#3755c3" : "#ba1a1a" }}
+              caption="12 bulan terakhir"
+            />
+          </div>
+          <div className="animate-fade-up" style={{ animationDelay: "180ms" }}>
+            <StatCard
+              label="Rasio Tabungan"
+              value={`${savingsRate.toFixed(0)}%`}
+              icon="savings"
+              tone="secondary"
+              caption="Net dibagi pemasukan"
+            />
+          </div>
+        </div>
+
         {insights.length > 0 ? (
-          <Card>
-            <CardHeader title="Insights" subtitle="Auto-detected from your data" />
+          <Card className="animate-fade-up">
+            <CardHeader title="Wawasan" subtitle="Terdeteksi otomatis dari data Anda" />
             <InsightsList insights={insights} />
           </Card>
         ) : null}
 
-        <Card>
-          <CardHeader
-            title="6-Month Trend"
-            subtitle="Income vs expense per month"
-            action={
-              <LineChartLegend
-                series={[
-                  { label: "Income", color: "#006c49", values: [] },
-                  { label: "Expense", color: "#1e40af", values: [] },
-                ]}
-              />
-            }
-          />
-          <LineChart
-            labels={trend.labels}
-            currency={currency}
-            series={[
-              { label: "Income", color: "#006c49", values: trend.income },
-              { label: "Expense", color: "#1e40af", values: trend.expense },
-            ]}
-          />
-        </Card>
+        <TrendChart
+          labels={trend.labels}
+          income={trend.income}
+          expense={trend.expense}
+          currency={currency}
+        />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader title="Top Categories" subtitle="Last 90 days" />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card className="animate-fade-up">
+            <CardHeader title="Kategori Teratas" subtitle="90 hari terakhir" />
             <HorizontalBars rows={topCategories} currency={currency} />
           </Card>
-          <Card>
-            <CardHeader title="Top Merchants" subtitle="Last 90 days" />
+          <Card className="animate-fade-up">
+            <CardHeader title="Merchant Teratas" subtitle="90 hari terakhir" />
             <HorizontalBars rows={topMerchants} currency={currency} />
           </Card>
         </div>
 
-        <Card>
+        <Card className="animate-fade-up">
           <CardHeader
-            title="Spending by Day of Week"
-            subtitle="All expenses in the last 6 months"
+            title="Pengeluaran per Hari"
+            subtitle={
+              busiestDow
+                ? `Total per hari dalam seminggu · paling boros: ${busiestDow}`
+                : "Total per hari dalam seminggu (12 bulan terakhir)"
+            }
           />
-          <VerticalBars labels={dowLabels} values={dow} currency={currency} />
+          <VerticalBars labels={DOW_SHORT} values={dow} currency={currency} />
         </Card>
 
-        <Card>
+        <Card className="animate-fade-up">
           <CardHeader
-            title="Recurring Transactions"
-            subtitle="Merchants you pay regularly (≥3 times, stable amount)"
+            title="Transaksi Berulang"
+            subtitle="Merchant yang Anda bayar rutin (≥3×, nominal stabil)"
           />
-          {recurring.length === 0 ? (
-            <div className="py-8 text-center text-body-sm text-outline">
-              No recurring pattern detected yet. Keep logging — we check for ≥3
-              similar-amount transactions per merchant.
-            </div>
-          ) : (
-            <div className="divide-y divide-outline-variant/50">
-              {recurring.map((r) => (
-                <div
-                  key={r.merchant}
-                  className="flex items-center justify-between py-3 gap-4"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-surface-container grid place-items-center shrink-0">
-                      <Icon name="repeat" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-body-md text-on-surface font-medium truncate">
-                        {r.merchant}
-                      </div>
-                      <div className="text-body-sm text-outline">
-                        {r.category || "Uncategorized"} · {r.occurrences}×
-                        <span className="mx-1">·</span>
-                        last {formatDate(r.lastSeen)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-body-md font-semibold tabular shrink-0">
-                    ~{formatCurrency(Math.round(r.averageAmount), r.currency)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <RecurringList items={recurring} currency={currency} />
         </Card>
       </div>
     </>

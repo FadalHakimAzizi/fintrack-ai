@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { Label, Select } from "@/components/ui/input";
+import { Select } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type MappableField =
@@ -21,18 +21,69 @@ type MappableField =
   | "__skip";
 
 const FIELD_LABELS: Record<string, string> = {
-  transaction_type: "Type (income/expense)*",
-  transaction_date: "Date*",
-  amount: "Amount*",
+  transaction_type: "Tipe (pemasukan/pengeluaran)*",
+  transaction_date: "Tanggal*",
+  amount: "Jumlah*",
   merchant_name: "Merchant",
-  item_name: "Item name",
-  category: "Category",
-  payment_method: "Payment method",
-  account_name: "Account",
-  notes: "Notes",
-  currency: "Currency",
-  __skip: "— skip —",
+  item_name: "Nama item",
+  category: "Kategori",
+  payment_method: "Metode bayar",
+  account_name: "Akun",
+  notes: "Catatan",
+  currency: "Mata uang",
+  __skip: "— lewati —",
 };
+
+const STEPS_DEF = [
+  { key: "upload", label: "Unggah", icon: "upload_file" },
+  { key: "map", label: "Petakan", icon: "table_chart" },
+  { key: "preview", label: "Pratinjau", icon: "preview" },
+] as const;
+
+function Stepper({ current }: { current: number }) {
+  return (
+    <div className="flex items-center">
+      {STEPS_DEF.map((s, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <Fragment key={s.key}>
+            <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  "grid h-9 w-9 shrink-0 place-items-center rounded-full text-body-sm font-semibold transition-colors",
+                  done
+                    ? "bg-secondary text-on-secondary"
+                    : active
+                      ? "bg-primary text-on-primary shadow-xs"
+                      : "bg-surface-container text-on-surface-variant",
+                )}
+              >
+                {done ? <Icon name="check" /> : i + 1}
+              </div>
+              <span
+                className={cn(
+                  "hidden text-body-sm font-medium sm:inline",
+                  active ? "text-on-surface" : "text-on-surface-variant",
+                )}
+              >
+                {s.label}
+              </span>
+            </div>
+            {i < STEPS_DEF.length - 1 ? (
+              <div
+                className={cn(
+                  "mx-2 h-0.5 flex-1 rounded-full transition-colors sm:mx-3",
+                  i < current ? "bg-secondary" : "bg-surface-container-high",
+                )}
+              />
+            ) : null}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 function parseCSV(text: string): { headers: string[]; rows: string[][] } {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
@@ -144,7 +195,7 @@ export function CSVImporter({ defaultCurrency }: { defaultCurrency: string }) {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       const { headers: h, rows: r } = parseCSV(text);
-      if (h.length === 0) { setError("Could not parse CSV. Check the file format."); return; }
+      if (h.length === 0) { setError("Gagal membaca CSV. Periksa format file."); return; }
       setHeaders(h);
       setRawRows(r);
       setMapping(guessMapping(h));
@@ -182,7 +233,7 @@ export function CSVImporter({ defaultCurrency }: { defaultCurrency: string }) {
     const hasDate = Object.values(mapping).includes("transaction_date");
     const hasAmount = Object.values(mapping).includes("amount");
     if (!hasDate || !hasAmount) {
-      setError("Please map at least Date and Amount columns.");
+      setError("Petakan minimal kolom Tanggal dan Jumlah.");
       return;
     }
     const mapped = applyMapping(headers, rawRows.slice(0, 200), mapping, defaultCurrency);
@@ -202,7 +253,7 @@ export function CSVImporter({ defaultCurrency }: { defaultCurrency: string }) {
         body: JSON.stringify({ rows: allMapped }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Import failed"); setImporting(false); return; }
+      if (!res.ok) { setError(data.error || "Impor gagal"); setImporting(false); return; }
       setResult({ inserted: data.inserted, errors: data.errors || [] });
       setStep("done");
       router.refresh();
@@ -214,26 +265,40 @@ export function CSVImporter({ defaultCurrency }: { defaultCurrency: string }) {
 
   if (step === "done" && result) {
     return (
-      <div className="text-center py-12 space-y-4">
-        <div className="w-16 h-16 mx-auto rounded-full bg-secondary/10 text-secondary grid place-items-center">
-          <Icon name="check_circle" filled />
+      <div className="animate-fade-up space-y-4 py-12 text-center">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-secondary/15 text-secondary">
+          <Icon name="check_circle" filled className="text-[32px]" />
         </div>
-        <h3 className="text-h3 font-h3 text-on-surface">Import complete!</h3>
-        <p className="text-body-md text-outline">{result.inserted} transactions imported.</p>
-        {result.errors.length > 0 && (
-          <p className="text-body-sm text-error">{result.errors.length} rows had errors and were skipped.</p>
-        )}
+        <div>
+          <h3 className="font-h2 text-h3 tracking-tight text-on-surface">Impor selesai!</h3>
+          <p className="mt-1 text-body-md text-on-surface-variant">
+            <span className="font-semibold text-on-surface tabular">{result.inserted}</span> transaksi diimpor.
+          </p>
+          {result.errors.length > 0 && (
+            <p className="mt-1 text-body-sm text-error">
+              {result.errors.length} baris error dan dilewati.
+            </p>
+          )}
+        </div>
         <Button variant="primary" onClick={() => router.push("/transactions")}>
-          View Transactions
+          <Icon name="receipt_long" />
+          Lihat Transaksi
         </Button>
       </div>
     );
   }
 
+  const currentStep = step === "upload" ? 0 : step === "map" ? 1 : 2;
+
   return (
     <div className="space-y-6">
+      <Stepper current={currentStep} />
+
       {error && (
-        <div className="p-3 rounded-lg bg-error-container text-on-error-container text-body-sm">{error}</div>
+        <div className="flex items-center gap-2 rounded-lg bg-error-container p-3 text-body-sm text-on-error-container">
+          <Icon name="error" filled />
+          {error}
+        </div>
       )}
 
       {step === "upload" && (
@@ -243,96 +308,125 @@ export function CSVImporter({ defaultCurrency }: { defaultCurrency: string }) {
           onDrop={handleDrop}
           onClick={() => fileRef.current?.click()}
           className={cn(
-            "border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors",
+            "cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all",
             dragOver
               ? "border-primary bg-primary/5"
-              : "border-outline-variant hover:border-primary hover:bg-surface-container-low",
+              : "border-outline-variant/70 hover:border-primary/50 hover:bg-surface-container-low",
           )}
         >
-          <Icon name="upload_file" />
-          <p className="text-body-md text-on-surface mt-3 font-medium">
-            Drop a CSV file here or click to upload
+          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-primary/12 text-primary">
+            <Icon name="upload_file" filled className="text-[32px]" />
+          </div>
+          <p className="text-body-lg font-medium text-on-surface">
+            Tarik file CSV ke sini atau klik untuk unggah
           </p>
-          <p className="text-body-sm text-outline mt-1">
-            Supports BCA, Mandiri, GoPay exports and any CSV with headers
+          <p className="mt-1 text-body-sm text-on-surface-variant">
+            Mendukung ekspor BCA, Mandiri, GoPay, dan CSV apa pun dengan header
           </p>
+          <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-surface-container px-3 py-1 text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <Icon name="description" className="text-[14px]" />
+            .CSV
+          </span>
           <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onFileChange} />
         </div>
       )}
 
       {step === "map" && (
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-h3 font-h3 text-on-surface mb-1">Map CSV Columns</h3>
-            <p className="text-body-sm text-outline">
-              {rawRows.length} rows detected. Match each column to the correct field.
-            </p>
+        <div className="space-y-5">
+          <div className="flex items-center gap-3 rounded-xl bg-primary/[0.06] px-4 py-3 text-body-sm text-on-surface">
+            <Icon name="table_chart" filled className="text-primary" />
+            <span>
+              <span className="font-semibold tabular">{rawRows.length}</span> baris terdeteksi. Cocokkan tiap kolom ke field yang tepat.
+            </span>
           </div>
 
-          <div className="space-y-3">
-            {headers.map((header, i) => (
-              <div key={i} className="flex items-center gap-4 p-3 rounded-lg border border-outline-variant/40 bg-surface-container-low">
-                <div className="flex-1 min-w-0">
-                  <div className="text-body-sm font-semibold text-on-surface truncate">{header}</div>
-                  <div className="text-label-caps text-outline truncate">
-                    e.g. {rawRows[0]?.[i] || "—"}
+          <div className="space-y-2">
+            {headers.map((header, i) => {
+              const mapped = mapping[i] && mapping[i] !== "__skip";
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex items-center gap-4 rounded-xl border p-3 transition-colors",
+                    mapped
+                      ? "border-outline-variant/40 bg-surface-container-lowest"
+                      : "border-outline-variant/30 bg-surface-container-low/40",
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <Icon
+                        name={mapped ? "check_circle" : "radio_button_unchecked"}
+                        filled={mapped}
+                        className={cn("text-[16px]", mapped ? "text-secondary" : "text-outline/50")}
+                      />
+                      <span className="truncate font-semibold text-on-surface">{header}</span>
+                    </div>
+                    <div className="mt-0.5 truncate pl-[22px] text-label-caps text-on-surface-variant">
+                      contoh: {rawRows[0]?.[i] || "—"}
+                    </div>
+                  </div>
+                  <div className="w-44 sm:w-52">
+                    <Select
+                      value={mapping[i] || "__skip"}
+                      onChange={(e) => onMapping(i, e.target.value as MappableField)}
+                    >
+                      {Object.entries(FIELD_LABELS).map(([val, label]) => (
+                        <option key={val} value={val}>{label}</option>
+                      ))}
+                    </Select>
                   </div>
                 </div>
-                <div className="w-52">
-                  <Select
-                    value={mapping[i] || "__skip"}
-                    onChange={(e) => onMapping(i, e.target.value as MappableField)}
-                  >
-                    {Object.entries(FIELD_LABELS).map(([val, label]) => (
-                      <option key={val} value={val}>{label}</option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex gap-3">
             <Button variant="primary" onClick={goPreview}>
-              Preview Import
+              <Icon name="preview" />
+              Pratinjau
             </Button>
-            <Button variant="ghost" onClick={() => setStep("upload")}>Back</Button>
+            <Button variant="ghost" onClick={() => setStep("upload")}>
+              <Icon name="arrow_back" />
+              Kembali
+            </Button>
           </div>
         </div>
       )}
 
       {step === "preview" && (
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-h3 font-h3 text-on-surface mb-1">Preview</h3>
-            <p className="text-body-sm text-outline">
-              Showing first {Math.min(10, previewRows.length)} of {rawRows.length} rows. Review before importing.
-            </p>
+        <div className="space-y-5">
+          <div className="flex items-center gap-3 rounded-xl bg-primary/[0.06] px-4 py-3 text-body-sm text-on-surface">
+            <Icon name="preview" filled className="text-primary" />
+            <span>
+              Menampilkan {Math.min(10, previewRows.length)} dari{" "}
+              <span className="font-semibold tabular">{rawRows.length}</span> baris. Tinjau sebelum impor.
+            </span>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-outline-variant/40">
             <table className="w-full text-body-sm">
               <thead>
-                <tr className="bg-surface-container-low border-b border-outline-variant/40">
-                  <th className="text-left px-3 py-2 text-outline font-semibold">Date</th>
-                  <th className="text-left px-3 py-2 text-outline font-semibold">Type</th>
-                  <th className="text-right px-3 py-2 text-outline font-semibold">Amount</th>
-                  <th className="text-left px-3 py-2 text-outline font-semibold">Merchant</th>
-                  <th className="text-left px-3 py-2 text-outline font-semibold">Category</th>
+                <tr className="border-b border-outline-variant/40 bg-surface-container-low">
+                  <th className="px-3 py-2 text-left font-semibold text-on-surface-variant">Tanggal</th>
+                  <th className="px-3 py-2 text-left font-semibold text-on-surface-variant">Tipe</th>
+                  <th className="px-3 py-2 text-right font-semibold text-on-surface-variant">Jumlah</th>
+                  <th className="px-3 py-2 text-left font-semibold text-on-surface-variant">Merchant</th>
+                  <th className="px-3 py-2 text-left font-semibold text-on-surface-variant">Kategori</th>
                 </tr>
               </thead>
               <tbody>
                 {previewRows.slice(0, 10).map((row, i) => (
-                  <tr key={i} className="border-b border-outline-variant/20 hover:bg-surface-container-low">
+                  <tr key={i} className="border-b border-outline-variant/20 last:border-0 hover:bg-surface-container-low">
                     <td className="px-3 py-2 text-on-surface">{String(row.transaction_date || "—")}</td>
                     <td className="px-3 py-2">
                       <span className={cn(
-                        "px-2 py-0.5 rounded-full text-label-caps",
+                        "rounded-full px-2 py-0.5 text-label-caps font-semibold",
                         row.transaction_type === "income"
-                          ? "bg-secondary/10 text-secondary"
-                          : "bg-primary/10 text-primary",
+                          ? "bg-secondary/15 text-secondary"
+                          : "bg-tertiary/15 text-tertiary",
                       )}>
-                        {String(row.transaction_type || "expense")}
+                        {row.transaction_type === "income" ? "Masuk" : "Keluar"}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right tabular text-on-surface">
@@ -348,9 +442,13 @@ export function CSVImporter({ defaultCurrency }: { defaultCurrency: string }) {
 
           <div className="flex gap-3">
             <Button variant="primary" onClick={doImport} disabled={importing}>
-              {importing ? "Importing..." : `Import ${rawRows.length} transactions`}
+              <Icon name={importing ? "progress_activity" : "file_download"} className={importing ? "animate-spin" : ""} />
+              {importing ? "Mengimpor…" : `Impor ${rawRows.length} transaksi`}
             </Button>
-            <Button variant="ghost" onClick={() => setStep("map")}>Back</Button>
+            <Button variant="ghost" onClick={() => setStep("map")}>
+              <Icon name="arrow_back" />
+              Kembali
+            </Button>
           </div>
         </div>
       )}

@@ -81,8 +81,11 @@ const config: Config = {
         numeric: ["16px", { lineHeight: "1", fontWeight: "500" }],
       },
       boxShadow: {
-        card: "0px 4px 20px rgba(0, 0, 0, 0.06)",
-        elevated: "0px 12px 32px rgba(0, 0, 0, 0.12)",
+        // Theme-aware layered elevation (values defined in globals.css :root / .dark)
+        xs: "var(--shadow-xs)",
+        card: "var(--shadow-card)",
+        "card-hover": "var(--shadow-card-hover)",
+        elevated: "var(--shadow-elevated)",
       },
       maxWidth: {
         container: "1280px",

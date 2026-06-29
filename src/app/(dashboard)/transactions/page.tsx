@@ -1,14 +1,26 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { TopBar } from "@/components/layout/topbar";
-import { Card, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { TxRow } from "@/components/transactions/tx-row";
 import { SemanticSearch } from "@/components/transactions/semantic-search";
+import { TransactionFilters } from "@/components/transactions/transaction-filters";
+import { Pagination } from "@/components/transactions/pagination";
 import type { Transaction } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 20;
+
+const SOURCE_LABELS: Record<string, string> = {
+  website: "Website",
+  telegram: "Telegram",
+  gmail: "Gmail",
+  ocr: "OCR",
+  api: "API",
+};
 
 interface SearchParams {
   q?: string;
@@ -17,6 +29,7 @@ interface SearchParams {
   category?: string;
   from?: string;
   to?: string;
+  page?: string;
 }
 
 export default async function TransactionsPage({
@@ -26,12 +39,16 @@ export default async function TransactionsPage({
 }) {
   const supabase = createClient();
 
+  const page = Math.max(1, parseInt(searchParams.page || "1", 10) || 1);
+  const rangeFrom = (page - 1) * PAGE_SIZE;
+  const rangeTo = rangeFrom + PAGE_SIZE - 1;
+
   let query = supabase
     .from("transactions")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("transaction_date", { ascending: false })
     .order("created_at", { ascending: false })
-    .limit(200);
+    .range(rangeFrom, rangeTo);
 
   if (searchParams.type && searchParams.type !== "all") {
     query = query.eq("transaction_type", searchParams.type);
@@ -55,7 +72,7 @@ export default async function TransactionsPage({
     );
   }
 
-  const { data: rows } = await query;
+  const { data: rows, count } = await query;
 
   const { data: categories } = await supabase
     .from("categories")
@@ -65,120 +82,123 @@ export default async function TransactionsPage({
     new Set((categories || []).map((c) => c.name)),
   );
 
-  const exportUrl =
-    "/api/export?" +
-    new URLSearchParams(
-      Object.entries(searchParams).filter(([, v]) => v) as [string, string][],
-    ).toString();
+  // Filters carried through export + pagination (everything except `page`).
+  const filterEntries = Object.entries(searchParams).filter(
+    ([k, v]) => v && k !== "page",
+  ) as [string, string][];
+  const paramsRecord = Object.fromEntries(filterEntries);
+  const exportUrl = "/api/export?" + new URLSearchParams(paramsRecord).toString();
+
+  const removeHref = (key: string) => {
+    const sp = new URLSearchParams(paramsRecord);
+    sp.delete(key);
+    const qs = sp.toString();
+    return qs ? `/transactions?${qs}` : "/transactions";
+  };
+
+  const active: { key: string; icon: string; label: string }[] = [];
+  if (searchParams.q) active.push({ key: "q", icon: "search", label: `"${searchParams.q}"` });
+  if (searchParams.type && searchParams.type !== "all")
+    active.push({
+      key: "type",
+      icon: searchParams.type === "income" ? "trending_up" : "trending_down",
+      label: searchParams.type === "income" ? "Pemasukan" : "Pengeluaran",
+    });
+  if (searchParams.source)
+    active.push({ key: "source", icon: "podcasts", label: SOURCE_LABELS[searchParams.source] || searchParams.source });
+  if (searchParams.category) active.push({ key: "category", icon: "category", label: searchParams.category });
+  if (searchParams.from) active.push({ key: "from", icon: "event", label: `Dari ${searchParams.from}` });
+  if (searchParams.to) active.push({ key: "to", icon: "event", label: `Sampai ${searchParams.to}` });
+
+  const total = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const listed = rows?.length ?? 0;
+  const start = total === 0 ? 0 : rangeFrom + 1;
+  const end = rangeFrom + listed;
 
   return (
     <>
       <TopBar
-        title="Transactions"
-        subtitle="All income and expense records"
+        title="Transaksi"
+        subtitle="Semua catatan pemasukan dan pengeluaran"
         action={
-          <div className="flex items-center gap-2">
-            <a href={exportUrl}>
-              <Button size="sm" variant="ghost">
-                <Icon name="download" />
-                Export CSV
-              </Button>
-            </a>
-            <Link href="/transactions/import">
-              <Button size="sm" variant="ghost">
-                <Icon name="upload_file" />
-                Import CSV
-              </Button>
-            </Link>
-            <Link href="/transactions/upload">
-              <Button size="sm" variant="ghost">
-                <Icon name="photo_camera" />
-                Upload Receipt
-              </Button>
-            </Link>
+          <div className="flex items-center gap-1.5">
+            <NavAction href={exportUrl} icon="download" label="Ekspor" external />
+            <NavAction href="/transactions/import" icon="upload_file" label="Impor" />
+            <NavAction href="/transactions/upload" icon="photo_camera" label="Struk" />
             <Link href="/transactions/new">
               <Button size="sm" variant="primary">
                 <Icon name="add" />
-                New
+                <span className="hidden sm:inline">Transaksi Baru</span>
+                <span className="sm:hidden">Baru</span>
               </Button>
             </Link>
           </div>
         }
       />
 
-      <div className="flex-1 p-8 overflow-y-auto max-w-container mx-auto w-full space-y-6">
-        <Card>
-          <CardHeader title="AI Search" subtitle="Search by natural language — try Indonesian too" />
+      <div className="flex-1 overflow-y-auto max-w-container mx-auto w-full space-y-6 p-6 md:p-8">
+        {/* AI search — distinct gradient panel */}
+        <section className="animate-fade-up surface-sheen relative overflow-hidden rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.07] via-surface-container-lowest to-secondary/[0.05] p-6 shadow-card">
+          <div className="mb-4 flex items-center gap-2.5">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-primary to-on-primary-fixed-variant text-on-primary shadow-sm ring-1 ring-inset ring-white/15">
+              <Icon name="auto_awesome" filled />
+            </span>
+            <div>
+              <h3 className="font-h2 text-h3 tracking-tight text-on-surface">Pencarian AI</h3>
+              <p className="text-body-sm text-on-surface-variant">
+                Cari dengan bahasa natural — coba pakai Bahasa Indonesia
+              </p>
+            </div>
+          </div>
           <SemanticSearch />
-        </Card>
+        </section>
 
-        <Card>
-          <form method="GET" className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input
-              name="q"
-              defaultValue={searchParams.q || ""}
-              placeholder="Search merchant, item, notes..."
-              className="md:col-span-2 px-4 py-2 border border-outline-variant rounded-lg text-body-sm focus-ring"
-            />
-            <select
-              name="type"
-              defaultValue={searchParams.type || "all"}
-              className="px-4 py-2 border border-outline-variant rounded-lg text-body-sm focus-ring"
-            >
-              <option value="all">All types</option>
-              <option value="income">Income</option>
-              <option value="expense">Expense</option>
-            </select>
-            <select
-              name="source"
-              defaultValue={searchParams.source || ""}
-              className="px-4 py-2 border border-outline-variant rounded-lg text-body-sm focus-ring"
-            >
-              <option value="">All sources</option>
-              <option value="website">Website</option>
-              <option value="telegram">Telegram</option>
-              <option value="gmail">Gmail</option>
-              <option value="ocr">OCR</option>
-              <option value="api">API</option>
-            </select>
-            <select
-              name="category"
-              defaultValue={searchParams.category || ""}
-              className="px-4 py-2 border border-outline-variant rounded-lg text-body-sm focus-ring"
-            >
-              <option value="">All categories</option>
-              {categoryNames.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              name="from"
-              defaultValue={searchParams.from || ""}
-              className="px-4 py-2 border border-outline-variant rounded-lg text-body-sm focus-ring"
-            />
-            <input
-              type="date"
-              name="to"
-              defaultValue={searchParams.to || ""}
-              className="px-4 py-2 border border-outline-variant rounded-lg text-body-sm focus-ring"
-            />
-            <Button type="submit" size="sm" className="md:col-span-2">
-              <Icon name="filter_alt" />
-              Apply filters
-            </Button>
-            <Link
-              href="/transactions"
-              className="md:col-span-1 px-4 py-2 border border-outline-variant rounded-lg text-body-sm text-center text-on-surface-variant hover:bg-surface-container"
-            >
-              Reset
-            </Link>
-          </form>
-        </Card>
+        {/* Filters */}
+        <div className="animate-fade-up" style={{ animationDelay: "60ms" }}>
+          <TransactionFilters
+            searchParams={searchParams}
+            categoryNames={categoryNames}
+            activeCount={active.length}
+          />
+        </div>
 
-        <Card>
+        {/* Results */}
+        <Card className="animate-fade-up" style={{ animationDelay: "120ms" }}>
+          {/* Keterangan: count + active filter chips */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/30 pb-4">
+            <p className="text-body-sm text-on-surface-variant">
+              {total > 0 ? (
+                <>
+                  Menampilkan <span className="font-semibold text-on-surface tabular">{start}–{end}</span>{" "}
+                  dari <span className="font-semibold text-on-surface tabular">{total}</span> transaksi
+                </>
+              ) : (
+                "Tidak ada transaksi yang cocok"
+              )}
+            </p>
+            {active.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {active.map((f) => (
+                  <Link
+                    key={f.key}
+                    href={removeHref(f.key)}
+                    className="group inline-flex items-center gap-1.5 rounded-full bg-primary/10 py-1 pl-2.5 pr-1.5 text-body-sm font-medium text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <Icon name={f.icon} className="text-[16px]" />
+                    <span className="max-w-[14rem] truncate">{f.label}</span>
+                    <span className="grid h-4 w-4 place-items-center rounded-full bg-primary/20 group-hover:bg-primary/30">
+                      <Icon name="close" className="text-[14px]" />
+                    </span>
+                  </Link>
+                ))}
+                <Link href="/transactions" className="ml-1 text-body-sm font-medium text-on-surface-variant hover:text-primary">
+                  Hapus semua
+                </Link>
+              </div>
+            ) : null}
+          </div>
+
           {rows && rows.length > 0 ? (
             <div className="space-y-1">
               {(rows as Transaction[]).map((t) => (
@@ -186,16 +206,56 @@ export default async function TransactionsPage({
               ))}
             </div>
           ) : (
-            <div className="py-12 text-center">
-              <Icon name="search_off" className="text-outline" />
-              <p className="text-body-md text-on-surface mt-2">No matching transactions</p>
-              <p className="text-body-sm text-outline">
-                Try adjusting your filters or add a new transaction.
+            <div className="py-16 text-center">
+              <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-surface-container">
+                <Icon name="search_off" className="text-outline" />
+              </div>
+              <p className="text-body-md font-medium text-on-surface">Tidak ada transaksi cocok</p>
+              <p className="mt-1 text-body-sm text-on-surface-variant">
+                Coba sesuaikan filter, atau tambahkan transaksi baru.
               </p>
+              <Link href="/transactions/new" className="mt-4 inline-block">
+                <Button size="sm">
+                  <Icon name="add" />
+                  Transaksi Baru
+                </Button>
+              </Link>
             </div>
           )}
+
+          <Pagination page={page} totalPages={totalPages} params={paramsRecord} />
         </Card>
       </div>
     </>
+  );
+}
+
+function NavAction({
+  href,
+  icon,
+  label,
+  external,
+}: {
+  href: string;
+  icon: string;
+  label: string;
+  external?: boolean;
+}) {
+  const cls =
+    "inline-flex items-center gap-1.5 rounded-lg border border-outline/30 bg-surface-container-low px-2.5 py-2 text-body-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface";
+  const inner = (
+    <>
+      <Icon name={icon} />
+      <span className="hidden lg:inline">{label}</span>
+    </>
+  );
+  return external ? (
+    <a href={href} title={label} className={cls}>
+      {inner}
+    </a>
+  ) : (
+    <Link href={href} title={label} className={cls}>
+      {inner}
+    </Link>
   );
 }

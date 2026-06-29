@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { updateProfile } from "@/app/(dashboard)/settings/actions";
 
 export function ProfileForm({
@@ -36,8 +37,9 @@ export function ProfileForm({
         </div>
       ) : null}
       {success ? (
-        <div className="p-3 rounded-lg bg-secondary-container text-on-secondary-container text-body-sm">
-          Profile saved.
+        <div className="flex items-center gap-2 rounded-lg bg-secondary-container p-3 text-body-sm text-on-secondary-container">
+          <Icon name="check_circle" filled />
+          Profil tersimpan.
         </div>
       ) : null}
 
@@ -45,11 +47,11 @@ export function ProfileForm({
         <Label htmlFor="email">Email</Label>
         <Input id="email" type="email" value={email} readOnly disabled />
         <p className="text-body-sm text-outline mt-1">
-          Email is managed via Supabase Auth. Contact support to change.
+          Email dikelola oleh sistem autentikasi. Hubungi dukungan untuk mengubahnya.
         </p>
       </div>
       <div>
-        <Label htmlFor="full_name">Full Name</Label>
+        <Label htmlFor="full_name">Nama Lengkap</Label>
         <Input
           id="full_name"
           name="full_name"
@@ -59,7 +61,7 @@ export function ProfileForm({
         />
       </div>
       <div>
-        <Label htmlFor="currency">Default Currency</Label>
+        <Label htmlFor="currency">Mata Uang Default</Label>
         <Input
           id="currency"
           name="currency"
@@ -69,12 +71,12 @@ export function ProfileForm({
           className="uppercase"
         />
         <p className="text-body-sm text-outline mt-1">
-          3-letter ISO code (IDR, USD, SGD, EUR, ...).
+          Kode ISO 3 huruf (IDR, USD, SGD, EUR, …).
         </p>
       </div>
       <div className="flex justify-end">
         <Button type="submit" variant="secondary" disabled={submitting}>
-          {submitting ? "Saving..." : "Save Profile"}
+          {submitting ? "Menyimpan..." : "Simpan Profil"}
         </Button>
       </div>
     </form>

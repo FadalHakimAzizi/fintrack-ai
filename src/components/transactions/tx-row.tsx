@@ -11,22 +11,40 @@ const SOURCE_ICON: Record<string, string> = {
   api: "api",
 };
 
+// Recognizable per-category icon so long lists are easier to scan and livelier.
+const CATEGORY_ICON: Record<string, string> = {
+  Groceries: "shopping_cart",
+  Dining: "restaurant",
+  Transportation: "directions_car",
+  Utilities: "bolt",
+  Entertainment: "sports_esports",
+  Shopping: "shopping_bag",
+  Health: "medical_services",
+  Salary: "payments",
+  Freelance: "work",
+  Investment: "trending_up",
+  Other: "category",
+};
+
 export function TxRow({ tx }: { tx: Transaction }) {
   const isIncome = tx.transaction_type === "income";
+  const iconName =
+    (tx.category && CATEGORY_ICON[tx.category]) ||
+    (isIncome ? "trending_up" : "shopping_bag");
   return (
     <Link
       href={`/transactions/${tx.id}`}
-      className="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-low transition-colors"
+      className="group flex items-center gap-4 px-4 py-3 rounded-xl border border-transparent hover:border-outline-variant/40 hover:bg-surface-container-low hover:shadow-xs transition-all"
     >
       <div
         className={cn(
-          "w-10 h-10 rounded-full grid place-items-center shrink-0",
+          "w-10 h-10 rounded-xl grid place-items-center shrink-0 ring-1 ring-inset transition-transform group-hover:scale-105",
           isIncome
-            ? "bg-secondary-container text-on-secondary-container"
-            : "bg-primary-container/10 text-primary",
+            ? "bg-secondary-container text-on-secondary-container ring-secondary/20"
+            : "bg-primary-container/15 text-primary ring-primary/15",
         )}
       >
-        <Icon name={isIncome ? "trending_up" : "shopping_bag"} filled />
+        <Icon name={iconName} filled />
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-body-md text-on-surface font-medium truncate flex items-center gap-2">
@@ -58,6 +76,10 @@ export function TxRow({ tx }: { tx: Transaction }) {
         {isIncome ? "+" : "-"}
         {formatCurrency(tx.amount, tx.currency)}
       </div>
+      <Icon
+        name="chevron_right"
+        className="-mr-1 shrink-0 text-outline opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100"
+      />
     </Link>
   );
 }

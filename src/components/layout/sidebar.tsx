@@ -14,61 +14,98 @@ const NAV_ITEMS = [
   { key: "nav.ai",           href: "/ai",           icon: "smart_toy" },
   { key: "nav.budgets",      href: "/budgets",      icon: "account_balance_wallet" },
   { key: "nav.goals",        href: "/goals",        icon: "savings" },
-  { key: "nav.settings",     href: "/settings",     icon: "settings" },
 ];
 
 export function Sidebar({ userEmail }: { userEmail: string | null }) {
   const pathname = usePathname();
-  const { t, sidebarOpen, setSidebarOpen } = useApp();
+  const { t, sidebarOpen, setSidebarOpen, collapsed } = useApp();
   const initials = (userEmail || "U").split("@")[0].slice(0, 2).toUpperCase();
+  const settingsActive = pathname === "/settings" || Boolean(pathname?.startsWith("/settings/"));
 
-  function close() { setSidebarOpen(false); }
+  const close = () => setSidebarOpen(false);
+  const hide = collapsed ? "md:hidden" : ""; // hide labels on desktop when collapsed
+  const center = collapsed ? "md:justify-center md:px-0" : "";
 
   return (
     <>
       {/* Mobile overlay backdrop */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-30 md:hidden"
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm md:hidden"
           onClick={close}
         />
       )}
 
-      <nav className={cn(
-        "bg-surface-container-lowest text-primary h-screen w-64 fixed left-0 top-0 z-40",
-        "border-r border-outline-variant flex flex-col p-4 space-y-2",
-        "transition-transform duration-300 ease-in-out",
-        // Mobile: hidden by default, slide in when open
-        // Desktop: always visible
-        "md:translate-x-0",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-      )}>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="font-h1 text-h1 text-primary tracking-tight">FinTrack AI</h1>
-          {/* Close button — mobile only */}
+      <nav
+        className={cn(
+          "fixed left-0 top-0 z-40 flex h-screen flex-col p-3",
+          "bg-surface-container-lowest/90 backdrop-blur-xl",
+          "border-r border-outline-variant/40",
+          "w-64", // mobile drawer width
+          collapsed ? "md:w-20" : "md:w-64",
+          "transition-[width,transform] duration-300 ease-in-out",
+          "md:translate-x-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+        )}
+      >
+        {/* Brand */}
+        <div className={cn("mb-6 flex h-11 items-center gap-2.5 px-1.5", center)}>
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-surface-tint text-on-primary shadow-xs ring-1 ring-inset ring-white/15">
+            <Icon name="account_balance_wallet" filled />
+          </div>
+          <h1 className={cn("truncate font-h1 text-h3 tracking-tight text-primary", hide)}>
+            FinTrack AI
+          </h1>
           <button
             onClick={close}
-            className="md:hidden w-8 h-8 rounded-full grid place-items-center text-on-surface-variant hover:bg-surface-container"
+            aria-label="Tutup menu navigasi"
+            className="ml-auto grid h-10 w-10 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container md:hidden"
           >
             <Icon name="close" />
           </button>
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-3 mb-6 bg-surface-container-low rounded-lg">
-          <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary flex items-center justify-center text-body-sm font-bold">
+        {/* User chip */}
+        <div
+          className={cn(
+            "mb-5 flex items-center gap-3 rounded-2xl bg-surface-container/50 p-2",
+            collapsed && "md:bg-transparent md:p-0 md:justify-center",
+          )}
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-on-primary-fixed-variant text-body-sm font-bold text-on-primary">
             {initials}
           </div>
-          <div className="min-w-0">
-            <div className="text-body-md font-semibold text-on-surface truncate">
+          <div className={cn("min-w-0", hide)}>
+            <div className="truncate text-body-sm font-semibold text-on-surface">
               {userEmail ? userEmail.split("@")[0] : "Guest"}
             </div>
-            <div className="text-body-sm text-outline truncate">
-              {userEmail || "Not signed in"}
+            <div className="truncate text-label-caps text-outline">
+              {userEmail || "Belum masuk"}
             </div>
           </div>
         </div>
 
-        <div className="flex-grow space-y-1 overflow-y-auto">
+        {/* Primary CTA */}
+        <Link
+          href="/transactions/new"
+          onClick={close}
+          title={t("nav.addTransaction")}
+          className={cn(
+            "mb-5 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-on-primary-fixed-variant px-4 py-3 text-body-md font-semibold text-on-primary shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover active:translate-y-0 active:scale-[0.99]",
+            collapsed && "md:mx-auto md:h-11 md:w-11 md:px-0 md:py-0",
+          )}
+        >
+          <Icon name="add" />
+          <span className={cn(hide)}>{t("nav.addTransaction")}</span>
+        </Link>
+
+        {/* Section label */}
+        <p className={cn("mb-1 px-3 text-label-caps uppercase tracking-wider text-outline/70", collapsed && "md:hidden")}>
+          Menu
+        </p>
+
+        {/* Nav items */}
+        <div className="no-scrollbar -mx-1 flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-1">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href || pathname?.startsWith(item.href + "/");
             return (
@@ -76,46 +113,66 @@ export function Sidebar({ userEmail }: { userEmail: string | null }) {
                 key={item.href}
                 href={item.href}
                 onClick={close}
+                aria-current={active ? "page" : undefined}
+                title={t(item.key)}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-2.5 rounded-lg text-body-md transition-all",
+                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-body-md transition-colors duration-200",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   active
-                    ? "bg-surface-container-high text-primary font-semibold"
-                    : "text-on-surface-variant hover:bg-surface-container hover:translate-x-1",
+                    ? "bg-primary/[0.08] text-primary font-semibold"
+                    : "text-on-surface-variant hover:bg-surface-container/60 hover:text-on-surface",
+                  center,
                 )}
               >
+                <span
+                  className={cn(
+                    "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary transition-opacity duration-200",
+                    active ? "opacity-100" : "opacity-0",
+                  )}
+                />
                 <Icon name={item.icon} filled={active} />
-                {t(item.key)}
+                <span className={cn("truncate", hide)}>{t(item.key)}</span>
               </Link>
             );
           })}
         </div>
 
-        <Link
-          href="/transactions/new"
-          onClick={close}
-          className="w-full bg-primary text-on-primary text-body-md font-medium py-3 px-4 rounded-lg hover:bg-on-primary-fixed-variant transition-colors mt-4 flex items-center justify-center gap-2"
-        >
-          <Icon name="add" />
-          {t("nav.addTransaction")}
-        </Link>
-
-        <div className="mt-auto pt-4 border-t border-outline-variant space-y-1">
-          <ThemeToggle />
+        {/* Footer — Settings is pinned here so it's always visible without scrolling */}
+        <div className="mt-3 space-y-0.5 border-t border-outline-variant/30 pt-3">
           <Link
             href="/settings"
             onClick={close}
-            className="flex items-center gap-3 px-4 py-2.5 text-on-surface-variant hover:bg-surface-container rounded-lg text-body-md transition-colors"
+            aria-current={settingsActive ? "page" : undefined}
+            title={t("nav.settings")}
+            className={cn(
+              "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-body-md transition-colors duration-200",
+              settingsActive
+                ? "bg-primary/[0.08] text-primary font-semibold"
+                : "text-on-surface-variant hover:bg-surface-container/60 hover:text-on-surface",
+              center,
+            )}
           >
-            <Icon name="help" />
-            {t("nav.help")}
+            <span
+              className={cn(
+                "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary transition-opacity duration-200",
+                settingsActive ? "opacity-100" : "opacity-0",
+              )}
+            />
+            <Icon name="settings" filled={settingsActive} />
+            <span className={cn("truncate", hide)}>{t("nav.settings")}</span>
           </Link>
+          <ThemeToggle collapsed={collapsed} />
           <form action="/auth/signout" method="post">
             <button
               type="submit"
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-on-surface-variant hover:bg-surface-container rounded-lg text-body-md transition-colors"
+              title={t("nav.logout")}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-body-md text-on-surface-variant transition-colors hover:bg-error-container/60 hover:text-error",
+                center,
+              )}
             >
               <Icon name="logout" />
-              {t("nav.logout")}
+              <span className={cn(hide)}>{t("nav.logout")}</span>
             </button>
           </form>
         </div>

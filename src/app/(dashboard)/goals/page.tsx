@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { TopBar } from "@/components/layout/topbar";
-import { Icon } from "@/components/ui/icon";
 import { GoalsList } from "@/components/goals/goals-list";
 import type { SavingsGoal } from "@/lib/types";
 
@@ -25,10 +24,10 @@ export default async function GoalsPage() {
   return (
     <>
       <TopBar
-        title="Savings Goals"
-        subtitle="Track your financial milestones"
+        title="Target Tabungan"
+        subtitle="Pantau pencapaian finansial Anda"
       />
-      <div className="flex-1 p-8 overflow-y-auto max-w-container mx-auto w-full">
+      <div className="flex-1 overflow-y-auto max-w-container mx-auto w-full p-6 md:p-8">
         <GoalsList goals={goals} currency={currency} />
       </div>
     </>

@@ -17,15 +17,16 @@ export default async function CategoriesPage() {
   return (
     <>
       <TopBar
-        title="Categories"
-        subtitle="Manage your income and expense categories"
+        title="Kategori"
+        subtitle="Kelola kategori pemasukan dan pengeluaran Anda"
       />
-      <div className="flex-1 p-8 overflow-y-auto max-w-container mx-auto w-full">
-        <div className="max-w-2xl mx-auto">
-          <Card>
+      <div className="flex-1 overflow-y-auto max-w-container mx-auto w-full p-6 md:p-8">
+        <div className="mx-auto max-w-2xl">
+          <Card className="animate-fade-up">
             <CardHeader
-              title="Categories"
-              subtitle="Add, customize, or remove transaction categories"
+              icon="category"
+              title="Kategori"
+              subtitle="Tambah, sesuaikan, atau hapus kategori transaksi"
             />
             <CategoryManager categories={(categories || []) as Category[]} />
           </Card>

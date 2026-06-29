@@ -21,6 +21,7 @@ export function ReceiptUploadFlow() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [parsedPreview, setParsedPreview] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   async function handleFile(file: File) {
     if (file.size > 8 * 1024 * 1024) {
@@ -88,13 +89,20 @@ export function ReceiptUploadFlow() {
     return (
       <div
         onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
         onDrop={(e) => {
           e.preventDefault();
+          setDragOver(false);
           const f = e.dataTransfer.files?.[0];
           if (f) handleFile(f);
         }}
-        className="border-2 border-dashed border-outline-variant hover:border-primary transition-colors rounded-xl p-12 flex flex-col items-center justify-center cursor-pointer group"
+        className={cn(
+          "group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-10 text-center transition-all",
+          dragOver
+            ? "border-primary bg-primary/5"
+            : "border-outline-variant/70 hover:border-primary/50 hover:bg-surface-container-low",
+        )}
       >
         <input
           ref={inputRef}
@@ -106,18 +114,26 @@ export function ReceiptUploadFlow() {
             if (f) handleFile(f);
           }}
         />
-        <div className="w-16 h-16 bg-primary-container/10 rounded-full flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform">
-          <Icon name="photo_camera" filled />
+        <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-on-primary-fixed-variant text-on-primary shadow-sm ring-1 ring-inset ring-white/15 transition-transform group-hover:scale-105">
+          <Icon name="photo_camera" filled className="text-[32px]" />
         </div>
-        <p className="text-body-lg text-on-surface font-medium mb-1">
-          Drop atau klik untuk pilih foto struk
+        <p className="text-body-lg font-medium text-on-surface">
+          Tarik atau klik untuk pilih foto struk
         </p>
-        <p className="text-body-sm text-outline mb-4">
-          AI akan baca dan buat transaksi otomatis
+        <p className="mt-1 text-body-sm text-on-surface-variant">
+          AI akan membaca dan membuat transaksi otomatis
         </p>
-        <span className="text-label-caps text-outline uppercase tracking-wider">
-          JPG · PNG · WEBP · PDF · max 8MB
-        </span>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+          {["JPG", "PNG", "WEBP", "PDF"].map((ext) => (
+            <span
+              key={ext}
+              className="rounded-full bg-surface-container px-2.5 py-0.5 text-label-caps uppercase tracking-wider text-on-surface-variant"
+            >
+              {ext}
+            </span>
+          ))}
+          <span className="text-label-caps uppercase tracking-wider text-outline">maks 8MB</span>
+        </div>
       </div>
     );
   }
@@ -140,7 +156,7 @@ export function ReceiptUploadFlow() {
           {phase === "error" ? (
             <Button variant="ghost" size="sm" onClick={reset}>
               <Icon name="refresh" />
-              Try again
+              Coba lagi
             </Button>
           ) : null}
         </div>
@@ -182,8 +198,8 @@ export function ReceiptUploadFlow() {
               </div>
               <span>{step.label}</span>
               {current ? (
-                <span className="ml-auto text-label-caps text-outline uppercase">
-                  Processing...
+                <span className="ml-auto text-label-caps uppercase tracking-wider text-outline">
+                  Memproses…
                 </span>
               ) : null}
             </li>
@@ -192,9 +208,10 @@ export function ReceiptUploadFlow() {
       </ol>
 
       {parsedPreview ? (
-        <div className="mt-4 p-3 rounded-lg bg-surface-container-low text-body-sm text-on-surface">
-          <span className="text-outline uppercase tracking-wider text-label-caps mr-2">
-            Detected:
+        <div className="mt-4 flex items-center gap-2 rounded-lg bg-secondary/10 p-3 text-body-sm text-on-surface">
+          <Icon name="auto_awesome" filled className="text-secondary" />
+          <span className="text-label-caps uppercase tracking-wider text-on-surface-variant">
+            Terdeteksi:
           </span>
           {parsedPreview}
         </div>

@@ -1,5 +1,5 @@
 {
-  "name": "FinTrack — Receipt OCR",
+  "name": "FinTrack - Receipt OCR",
   "nodes": [
     {
       "parameters": {
@@ -12,7 +12,12 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 360]
+      "position": [
+        240,
+        368
+      ],
+      "webhookId": "ff044393-de15-4132-9387-b5e34222c381",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -50,90 +55,95 @@
       "name": "Read Input",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [460, 360]
+      "position": [
+        464,
+        368
+      ]
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "={{ $json.image_url }}",
-        "sendHeaders": false,
-        "options": {
-          "response": {
-            "response": {
-              "responseFormat": "file"
-            }
-          },
-          "timeout": 30000
-        }
-      },
-      "id": "c3e7a921-3d1c-4f7b-9f0a-3b4c5d6e7f03",
-      "name": "Download Image",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [680, 360]
-    },
-    {
-      "parameters": {
-        "jsCode": "const meta = $input.first().binary?.data;\nif (!meta) {\n  throw new Error('No binary from Download Image — did the URL resolve?');\n}\nconst mime = meta.mimeType || 'image/jpeg';\n\nlet base64;\ntry {\n  const buffer = await $helpers.getBinaryDataBuffer(0, 'data');\n  base64 = buffer.toString('base64');\n} catch (err) {\n  if (typeof meta.data === 'string' && meta.data.length > 500) {\n    base64 = meta.data;\n  } else {\n    throw new Error('Could not read downloaded image: ' + (err?.message || 'unknown'));\n  }\n}\n\nconst dataUrl = `data:${mime};base64,${base64}`;\n\nreturn [{\n  json: {\n    user_id: $('Read Input').item.json.user_id,\n    attachment_path: $('Read Input').item.json.attachment_path,\n    attachment_url: $('Read Input').item.json.image_url,\n    source_reference: $('Read Input').item.json.source_reference,\n    data_url: dataUrl\n  }\n}];"
+        "jsCode": "// Skip binary - kirim URL langsung ke Vision LLM\nconst imageUrl = $('Read Input').item.json.image_url;\n\nreturn [{\n  json: {\n    user_id: $('Read Input').item.json.user_id,\n    attachment_path: $('Read Input').item.json.attachment_path,\n    attachment_url: imageUrl,\n    source_reference: $('Read Input').item.json.source_reference,\n    data_url: imageUrl   // kirim URL langsung, bukan base64\n  }\n}];"
       },
       "id": "c3e7a921-3d1c-4f7b-9f0a-3b4c5d6e7f04",
       "name": "To Base64",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 360]
+      "position": [
+        912,
+        368
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "HTTP-Referer", "value": "https://fintrack.local" },
-            { "name": "X-Title", "value": "FinTrack AI" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'google/gemini-2.0-flash-exp:free', temperature: 0.1, messages: [ { role: 'user', content: [ { type: 'text', text: 'You are a receipt / invoice OCR and data extractor. Read this receipt image and return ONLY a JSON object — no prose, no markdown fences.\\n\\nSchema:\\n{\\n  \"transaction_type\": \"expense\",\\n  \"amount\": number (grand total, no thousand separators),\\n  \"currency\": string (default \"IDR\"),\\n  \"transaction_date\": string (ISO YYYY-MM-DD if visible, else null),\\n  \"merchant_name\": string | null,\\n  \"item_name\": string | null (short summary of items),\\n  \"category\": one of [\"Groceries\",\"Dining\",\"Transportation\",\"Utilities\",\"Entertainment\",\"Shopping\",\"Health\",\"Other\"],\\n  \"payment_method\": string | null,\\n  \"invoice_number\": string | null,\\n  \"location\": string | null,\\n  \"tax_amount\": number | null,\\n  \"discount_amount\": number | null,\\n  \"notes\": string | null,\\n  \"confidence_score\": number 0..1\\n}\\n\\nRules:\\n- amount = grand total after tax/discount\\n- If you cannot read a field, set it to null\\n- Never return markdown, never return prose\\n- Return ONLY the JSON.' }, { type: 'image_url', image_url: { url: $json.data_url } } ] } ] }) }}",
-        "options": { "timeout": 90000 }
+        "jsonBody": "={{ JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', temperature: 0.1, messages: [ { role: 'user', content: [ { type: 'text', text: 'You are a receipt / invoice OCR and data extractor. Read this receipt image and return ONLY a JSON object - no prose, no markdown fences.\\n\\nSchema:\\n{\\n  \"transaction_type\": \"expense\",\\n  \"amount\": number (grand total, no thousand separators),\\n  \"currency\": string (default \"IDR\"),\\n  \"transaction_date\": string (ISO YYYY-MM-DD if visible, else null),\\n  \"merchant_name\": string | null,\\n  \"item_name\": string | null (short summary of items),\\n  \"category\": one of [\"Groceries\",\"Dining\",\"Transportation\",\"Utilities\",\"Entertainment\",\"Shopping\",\"Health\",\"Other\"],\\n  \"payment_method\": string | null,\\n  \"invoice_number\": string | null,\\n  \"location\": string | null,\\n  \"tax_amount\": number | null,\\n  \"discount_amount\": number | null,\\n  \"notes\": string | null,\\n  \"confidence_score\": number 0..1\\n}\\n\\nRules:\\n- amount = grand total after tax/discount\\n- If you cannot read a field, set it to null\\n- Never return markdown, never return prose\\n- Return ONLY the JSON.' }, { type: 'image_url', image_url: { url: $json.data_url } } ] } ] }) }}",
+        "options": {
+          "timeout": 90000
+        }
       },
       "id": "c3e7a921-3d1c-4f7b-9f0a-3b4c5d6e7f05",
       "name": "Vision LLM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1140, 360],
+      "position": [
+        1152,
+        368
+      ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_OPENROUTER_CREDENTIAL_ID",
-          "name": "OpenRouter"
+          "id": "H5ckmlGmfkJgIK4Y",
+          "name": "groq"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json?.choices?.[0]?.message?.content || '';\nconst cleaned = raw.replace(/```json\\n?|```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (err) {\n  return [{ json: { _error: 'Could not parse LLM output', raw } }];\n}\n\nif (typeof parsed.amount !== 'number' || parsed.amount <= 0) {\n  return [{ json: { _error: 'No amount detected', parsed } }];\n}\n\nconst ctx = $('To Base64').first().json;\n\nconst payload = {\n  user_id: ctx.user_id,\n  transaction_type: 'expense',\n  amount: parsed.amount,\n  currency: parsed.currency || 'IDR',\n  transaction_date: parsed.transaction_date || new Date().toISOString().slice(0, 10),\n  merchant_name: parsed.merchant_name || null,\n  item_name: parsed.item_name || null,\n  category: parsed.category || null,\n  payment_method: parsed.payment_method || null,\n  invoice_number: parsed.invoice_number || null,\n  location: parsed.location || null,\n  notes: parsed.notes || null,\n  source_channel: 'ocr',\n  source_reference: ctx.source_reference,\n  attachment_url: ctx.attachment_url || null,\n  attachment_path: ctx.attachment_path || null,\n  confidence_score: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : 0.6,\n  category_confidence: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : null,\n  parsed_status: parsed.confidence_score && parsed.confidence_score >= 0.8 ? 'parsed' : 'pending'\n};\n\nreturn [{ json: payload }];"
+        "jsCode": "const raw = $input.first().json?.choices?.[0]?.message?.content || '';\nconst cleaned = raw.replace(/```json\\n?|```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (err) {\n  return [{ json: { _error: 'Could not parse LLM output', raw } }];\n}\n\nif (typeof parsed.amount !== 'number' || parsed.amount <= 0) {\n  return [{ json: { _error: 'No amount detected', parsed } }];\n}\n\nconst ctx = $('To Base64').first().json;\n\nconst payload = {\n  user_id: ctx.user_id,\n  transaction_type: 'expense',\n  amount: parsed.amount,\n  currency: parsed.currency || 'IDR',\n  transaction_date: parsed.transaction_date || new Date().toISOString().slice(0, 10),\n  merchant_name: parsed.merchant_name || null,\n  item_name: parsed.item_name || null,\n  category: parsed.category || null,\n  payment_method: parsed.payment_method || null,\n  invoice_number: parsed.invoice_number || null,\n  location: parsed.location || null,\n  notes: parsed.notes || null,\n  source_channel: 'ocr',\n  source_reference: ctx.source_reference,\n  attachment_url: ctx.attachment_url || null,\n  attachment_path: ctx.attachment_path || null,\n  confidence_score: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : 0.6,\n  category_confidence: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : null,\n  parsed_status: 'parsed'\n};\n\nreturn [{ json: payload }];"
       },
       "id": "c3e7a921-3d1c-4f7b-9f0a-3b4c5d6e7f06",
       "name": "Build Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1380, 360]
+      "position": [
+        1392,
+        368
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
           "combinator": "and",
           "conditions": [
             {
               "id": "c1",
               "leftValue": "={{ $json._error }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "empty", "singleValue": true }
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
             }
           ]
         },
@@ -143,30 +153,39 @@
       "name": "Parse OK?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1620, 360]
+      "position": [
+        1632,
+        368
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://humorless-broadcast-earthling.ngrok-free.dev/api/webhooks/n8n",
+        "url": "https://fintrack-ai-omega.vercel.app/api/webhooks/n8n",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "x-webhook-secret", "value": "3a11d13657165da7a3c1b03235bd4a26f4c8f14f5e6cde8ee0347864235e98e4" },
-            { "name": "ngrok-skip-browser-warning", "value": "true" }
+            {
+              "name": "x-webhook-secret",
+              "value": "3a11d13657165da7a3c1b03235bd4a26f4c8f14f5e6cde8ee0347864235e98e4"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "c3e7a921-3d1c-4f7b-9f0a-3b4c5d6e7f08",
       "name": "Post to Website",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1860, 260]
+      "position": [
+        1872,
+        272
+      ]
     },
     {
       "parameters": {
@@ -180,7 +199,10 @@
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2100, 260]
+      "position": [
+        2112,
+        272
+      ]
     },
     {
       "parameters": {
@@ -194,40 +216,157 @@
       "name": "Respond Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1860, 460]
+      "position": [
+        1872,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', temperature: 0.1, messages: [ { role: 'user', content: [ { type: 'text', text: 'You are a receipt / invoice OCR and data extractor. Read this receipt image and return ONLY a JSON object - no prose, no markdown fences.\\n\\nSchema:\\n{\\n  \"transaction_type\": \"expense\",\\n  \"amount\": number (grand total, no thousand separators),\\n  \"currency\": string (default \"IDR\"),\\n  \"transaction_date\": string (ISO YYYY-MM-DD if visible, else null),\\n  \"merchant_name\": string | null,\\n  \"item_name\": string | null (short summary of items),\\n  \"category\": one of [\"Groceries\",\"Dining\",\"Transportation\",\"Utilities\",\"Entertainment\",\"Shopping\",\"Health\",\"Other\"],\\n  \"payment_method\": string | null,\\n  \"invoice_number\": string | null,\\n  \"location\": string | null,\\n  \"tax_amount\": number | null,\\n  \"discount_amount\": number | null,\\n  \"notes\": string | null,\\n  \"confidence_score\": number 0..1\\n}\\n\\nRules:\\n- amount = grand total after tax/discount\\n- If you cannot read a field, set it to null\\n- Never return markdown, never return prose\\n- Return ONLY the JSON.' }, { type: 'image_url', image_url: { url: $json.data_url } } ] } ] }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "a29de62a-d368-47c7-9bf5-ec49d265a0c7",
+      "name": "Vision LLM (backup)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1152,
+        568
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RRJ8HwbhMLO1Cl9Z",
+          "name": "groq-backup"
+        }
+      },
+      "onError": "stopWorkflow"
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [[{ "node": "Read Input", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Read Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Read Input": {
-      "main": [[{ "node": "Download Image", "type": "main", "index": 0 }]]
-    },
-    "Download Image": {
-      "main": [[{ "node": "To Base64", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "To Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "To Base64": {
-      "main": [[{ "node": "Vision LLM", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Vision LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Vision LLM": {
-      "main": [[{ "node": "Build Payload", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Vision LLM (backup)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Payload": {
-      "main": [[{ "node": "Parse OK?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Parse OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parse OK?": {
       "main": [
-        [{ "node": "Post to Website", "type": "main", "index": 0 }],
-        [{ "node": "Respond Error", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Post to Website",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Post to Website": {
-      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vision LLM (backup)": {
+      "main": [
+        [
+          {
+            "node": "Build Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
-    "executionOrder": "v1"
-  },
-  "active": false
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
 }

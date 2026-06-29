@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppProvider } from "@/lib/app-provider";
+import { ToastProvider } from "@/components/ui/toast";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 
 export const metadata: Metadata = {
-  title: "FinTrack AI — Finance Tracker",
-  description: "Personal finance tracker with automation-ready architecture.",
+  title: { default: "FinTrack AI", template: "%s · FinTrack AI" },
+  description: "Pelacak keuangan pribadi dengan AI — catat, analisis, dan rencanakan keuanganmu.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -22,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             if(t&&t!=='ocean')h.setAttribute('data-theme',t);
             h.setAttribute('dir',l==='ar'?'rtl':'ltr');
             h.setAttribute('lang',l);
+            h.style.setProperty('--sidebar-w', localStorage.getItem('sidebarCollapsed')==='true'?'5rem':'16rem');
           }catch(e){}
         `}} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -36,7 +39,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen bg-background text-on-background">
-        <AppProvider>{children}</AppProvider>
+        <AppProvider>
+          <ConfirmProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </ConfirmProvider>
+        </AppProvider>
       </body>
     </html>
   );

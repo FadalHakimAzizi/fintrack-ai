@@ -50,31 +50,34 @@ export function GoalForm({
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 p-6 border border-outline-variant/40 rounded-xl bg-surface-container-low">
-      <h3 className="text-h3 font-h3 text-on-surface">New Savings Goal</h3>
+    <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-outline-variant/40 bg-surface-container-low p-6">
+      <h3 className="font-h2 text-h3 tracking-tight text-on-surface">Target Tabungan Baru</h3>
 
       {error && (
-        <div className="p-3 rounded-lg bg-error-container text-on-error-container text-body-sm">{error}</div>
+        <div className="flex items-center gap-2 rounded-lg bg-error-container p-3 text-body-sm text-on-error-container">
+          <Icon name="error" filled />
+          {error}
+        </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <Label htmlFor="goal-name">Goal name</Label>
-          <Input id="goal-name" name="name" required placeholder="e.g. Emergency Fund, New Laptop" />
+          <Label htmlFor="goal-name">Nama target</Label>
+          <Input id="goal-name" name="name" required placeholder="mis. Dana Darurat, Laptop Baru" />
         </div>
         <div>
-          <Label htmlFor="goal-target">Target amount</Label>
+          <Label htmlFor="goal-target">Jumlah target</Label>
           <Input id="goal-target" name="target_amount" type="number" min="1" step="1000" required placeholder="0" />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <Label htmlFor="goal-current">Starting amount</Label>
+          <Label htmlFor="goal-current">Jumlah awal</Label>
           <Input id="goal-current" name="current_amount" type="number" min="0" step="1000" defaultValue="0" />
         </div>
         <div>
-          <Label htmlFor="goal-date">Target date (optional)</Label>
+          <Label htmlFor="goal-date">Tanggal target (opsional)</Label>
           <Input id="goal-date" name="target_date" type="date" min={today} />
         </div>
       </div>
@@ -82,7 +85,7 @@ export function GoalForm({
       <input type="hidden" name="currency" value={defaultCurrency} />
 
       <div>
-        <Label>Color</Label>
+        <Label>Warna</Label>
         <div className="flex flex-wrap gap-2 mt-1">
           {GOAL_COLORS.map((c) => (
             <button
@@ -97,7 +100,7 @@ export function GoalForm({
       </div>
 
       <div>
-        <Label>Icon</Label>
+        <Label>Ikon</Label>
         <div className="flex flex-wrap gap-2 mt-1">
           {GOAL_ICONS.map((ic) => (
             <button
@@ -118,15 +121,16 @@ export function GoalForm({
       </div>
 
       <div>
-        <Label htmlFor="goal-notes">Notes (optional)</Label>
-        <Textarea id="goal-notes" name="notes" rows={2} placeholder="What's this goal for?" />
+        <Label htmlFor="goal-notes">Catatan (opsional)</Label>
+        <Textarea id="goal-notes" name="notes" rows={2} placeholder="Target ini untuk apa?" />
       </div>
 
       <div className="flex gap-3">
         <Button type="submit" variant="primary" disabled={submitting}>
-          {submitting ? "Saving..." : "Create Goal"}
+          <Icon name={submitting ? "progress_activity" : "add"} className={submitting ? "animate-spin" : ""} />
+          {submitting ? "Menyimpan…" : "Buat Target"}
         </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>Batal</Button>
       </div>
     </form>
   );

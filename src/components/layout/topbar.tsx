@@ -12,31 +12,42 @@ export function TopBar({
   subtitle?: string;
   action?: React.ReactNode;
 }) {
-  const { setSidebarOpen } = useApp();
+  const { setSidebarOpen, toggleCollapsed, collapsed } = useApp();
 
   return (
-    <header className="h-16 md:h-20 px-4 md:px-8 flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest sticky top-0 z-30">
-      <div className="flex items-center gap-3 min-w-0">
-        {/* Hamburger — mobile only */}
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-outline-variant/50 bg-surface-container-lowest/70 px-4 backdrop-blur-xl md:h-20 md:px-8">
+      <div className="flex min-w-0 items-center gap-2 md:gap-3">
+        {/* Mobile: open drawer */}
         <button
           onClick={() => setSidebarOpen(true)}
-          className="md:hidden w-9 h-9 rounded-full grid place-items-center text-on-surface-variant hover:bg-surface-container transition-colors shrink-0"
+          aria-label="Buka menu navigasi"
+          className="-ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container md:hidden"
         >
           <Icon name="menu" />
         </button>
+        {/* Desktop: collapse / expand sidebar */}
+        <button
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Luaskan sidebar" : "Ciutkan sidebar"}
+          title={collapsed ? "Luaskan sidebar" : "Ciutkan sidebar"}
+          className="-ml-1 hidden h-10 w-10 shrink-0 place-items-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container md:grid"
+        >
+          <Icon name={collapsed ? "menu" : "menu_open"} />
+        </button>
+
         <div className="min-w-0">
-          <h2 className="text-h3 md:text-h2 font-h2 text-on-surface truncate">{title}</h2>
+          <h2 className="truncate text-h3 font-h2 tracking-tight text-on-surface md:text-h2">
+            {title}
+          </h2>
           {subtitle && (
-            <p className="text-body-sm text-outline mt-0.5 hidden sm:block truncate">{subtitle}</p>
+            <p className="mt-0.5 hidden truncate text-body-sm text-on-surface-variant sm:block">
+              {subtitle}
+            </p>
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2 md:gap-4 shrink-0">
-        {action}
-        <button className="text-on-surface-variant hover:bg-surface-container p-2 rounded-full transition-colors">
-          <Icon name="notifications" />
-        </button>
-      </div>
+
+      <div className="flex shrink-0 items-center gap-1 md:gap-2">{action}</div>
     </header>
   );
 }

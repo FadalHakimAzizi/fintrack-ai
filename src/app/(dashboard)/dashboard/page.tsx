@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { TopBar } from "@/components/layout/topbar";
+import { BalanceHero } from "@/components/dashboard/balance-hero";
+import { QuickActions } from "@/components/dashboard/quick-actions";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { CategoryBars } from "@/components/dashboard/category-bars";
+import { CategoryDonut } from "@/components/dashboard/category-donut";
 import { InsightsList } from "@/components/dashboard/insights-list";
-import { LineChart, LineChartLegend } from "@/components/charts/line-chart";
+import { TrendChart } from "@/components/dashboard/trend-chart";
 import { TxRow } from "@/components/transactions/tx-row";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,22 @@ import type { Transaction } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+type Trend = { value: string; direction: "up" | "down"; good: boolean };
+
+// Month-over-month delta as a labeled pill. `betterWhen` says which direction
+// counts as "good" (income up is good; expenses down is good).
+function momTrend(
+  cur: number,
+  prev: number,
+  betterWhen: "up" | "down",
+): Trend | undefined {
+  if (!prev) return undefined;
+  const delta = ((cur - prev) / Math.abs(prev)) * 100;
+  if (!Number.isFinite(delta) || Math.abs(delta) < 1) return undefined;
+  const direction: "up" | "down" = delta >= 0 ? "up" : "down";
+  return { value: `${Math.abs(delta).toFixed(0)}%`, direction, good: direction === betterWhen };
+}
+
 export default async function DashboardPage() {
   const supabase = createClient();
   const {
@@ -24,20 +42,21 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("currency")
+    .select("currency, full_name")
     .eq("id", user!.id)
     .single();
   const currency = profile?.currency || "IDR";
 
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  sixMonthsAgo.setDate(1);
+  // Pull a full year so the dashboard can toggle between 6-month and 1-year trends.
+  const yearAgo = new Date();
+  yearAgo.setMonth(yearAgo.getMonth() - 12);
+  yearAgo.setDate(1);
 
   const [{ data: txRows }, { data: budgetsData }] = await Promise.all([
     supabase
       .from("transactions")
       .select("*")
-      .gte("transaction_date", sixMonthsAgo.toISOString().slice(0, 10))
+      .gte("transaction_date", yearAgo.toISOString().slice(0, 10))
       .order("transaction_date", { ascending: false })
       .order("created_at", { ascending: false }),
     supabase
@@ -77,30 +96,86 @@ export default async function DashboardPage() {
 
   const recent = transactions.slice(0, 8);
   const insights = computeInsights(transactions, { currency });
-  const trend = monthlyTrend(transactions, 6);
+  const trend = monthlyTrend(transactions, 12);
   const budgetProgress = computeBudgetProgress(budgets, transactions);
   const overBudget = budgetProgress.filter((p) => p.status === "over");
   const warning = budgetProgress.filter((p) => p.status === "warning");
 
+  // Previous calendar month totals (second-to-last point in the 6-month trend)
+  // drive the month-over-month pills on the stat cards.
+  const prevIncome = trend.income.at(-2) ?? 0;
+  const prevExpense = trend.expense.at(-2) ?? 0;
+  const prevNet = prevIncome - prevExpense;
+  const netSeries = trend.income.map((v, i) => v - trend.expense[i]);
+  const savingsRate = income > 0 ? (net / income) * 100 : 0;
+
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting =
+    hour < 11
+      ? "Selamat pagi"
+      : hour < 15
+        ? "Selamat siang"
+        : hour < 19
+          ? "Selamat sore"
+          : "Selamat malam";
+  const monthLabel = now.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+  const dateLabel = now.toLocaleDateString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  // Prefer the saved full name; fall back to the email's local part.
+  const fullName = (profile?.full_name || "").trim();
+  const rawName = fullName || (user?.email?.split("@")[0] ?? "Teman");
+  const displayName =
+    rawName.charAt(0).toUpperCase() + rawName.slice(1).replace(/[._-]+/g, " ");
+  const initials =
+    (fullName || rawName)
+      .split(/[\s._-]+/)
+      .filter(Boolean)
+      .map((w: string) => w[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "U";
+
   return (
     <>
       <TopBar
-        title="Dashboard"
-        subtitle="Monthly overview of your cash flow"
+        title="Dasbor"
+        subtitle="Ringkasan arus kas bulanan Anda"
         action={
           <Link href="/transactions/new">
             <Button size="sm" variant="primary">
               <Icon name="add" />
-              New Transaction
+              Transaksi Baru
             </Button>
           </Link>
         }
       />
-      <div className="flex-1 p-8 overflow-y-auto max-w-container mx-auto w-full space-y-8">
+      <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-container mx-auto w-full space-y-6 md:space-y-8">
+        <BalanceHero
+          greeting={greeting}
+          name={displayName}
+          initials={initials}
+          dateLabel={dateLabel}
+          monthLabel={monthLabel}
+          net={net}
+          income={income}
+          expense={expense}
+          savingsRate={savingsRate}
+          currency={currency}
+        />
+
+        <div className="animate-fade-up" style={{ animationDelay: "40ms" }}>
+          <QuickActions />
+        </div>
+
         {overBudget.length + warning.length > 0 ? (
           <Link
             href="/budgets"
-            className={`block p-4 rounded-lg flex items-start gap-3 transition-colors ${
+            className={`animate-fade-up block p-4 rounded-lg flex items-start gap-3 transition-colors ${
               overBudget.length > 0
                 ? "bg-error-container text-on-error-container hover:opacity-90"
                 : "bg-tertiary-container/20 text-tertiary hover:bg-tertiary-container/30"
@@ -124,34 +199,46 @@ export default async function DashboardPage() {
         ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard
-            label="Income (this month)"
-            value={formatCurrency(income, currency)}
-            icon="trending_up"
-            tone="secondary"
-          />
-          <StatCard
-            label="Expense (this month)"
-            value={formatCurrency(expense, currency)}
-            icon="trending_down"
-            tone="tertiary"
-          />
-          <StatCard
-            label="Net"
-            value={formatCurrency(net, currency)}
-            icon="account_balance"
-            tone={net >= 0 ? "primary" : "error"}
-          />
+          <div className="animate-fade-up" style={{ animationDelay: "60ms" }}>
+            <StatCard
+              label="Pemasukan (bulan ini)"
+              value={formatCurrency(income, currency)}
+              icon="trending_up"
+              tone="secondary"
+              trend={momTrend(income, prevIncome, "up")}
+              spark={{ values: trend.income, color: "#0d9488" }}
+            />
+          </div>
+          <div className="animate-fade-up" style={{ animationDelay: "120ms" }}>
+            <StatCard
+              label="Pengeluaran (bulan ini)"
+              value={formatCurrency(expense, currency)}
+              icon="trending_down"
+              tone="tertiary"
+              trend={momTrend(expense, prevExpense, "down")}
+              spark={{ values: trend.expense, color: "#d97706" }}
+            />
+          </div>
+          <div className="animate-fade-up" style={{ animationDelay: "180ms" }}>
+            <StatCard
+              label="Net"
+              value={formatCurrency(net, currency)}
+              icon="account_balance"
+              tone={net >= 0 ? "primary" : "error"}
+              trend={momTrend(net, prevNet, "up")}
+              spark={{ values: netSeries, color: net >= 0 ? "#3755c3" : "#ba1a1a" }}
+            />
+          </div>
         </div>
 
         {insights.length > 0 ? (
-          <Card>
+          <Card className="animate-fade-up">
             <CardHeader
-              title="Insights"
-              subtitle="Auto-detected from your recent transactions"
+              title="Wawasan"
+              subtitle="Terdeteksi otomatis dari transaksi terbaru Anda"
               action={
                 <Link href="/ai" className="text-body-sm text-primary font-semibold">
-                  Ask AI →
+                  Tanya AI →
                 </Link>
               }
             />
@@ -159,37 +246,21 @@ export default async function DashboardPage() {
           </Card>
         ) : null}
 
-        <Card>
-          <CardHeader
-            title="6-Month Trend"
-            subtitle="Income vs expense"
-            action={
-              <LineChartLegend
-                series={[
-                  { label: "Income", color: "#006c49", values: [] },
-                  { label: "Expense", color: "#1e40af", values: [] },
-                ]}
-              />
-            }
-          />
-          <LineChart
-            labels={trend.labels}
-            currency={currency}
-            series={[
-              { label: "Income", color: "#006c49", values: trend.income },
-              { label: "Expense", color: "#1e40af", values: trend.expense },
-            ]}
-          />
-        </Card>
+        <TrendChart
+          labels={trend.labels}
+          income={trend.income}
+          expense={trend.expense}
+          currency={currency}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2">
+          <Card className="animate-fade-up lg:col-span-2">
             <CardHeader
-              title="Recent Transactions"
-              subtitle="Your latest activity"
+              title="Transaksi Terbaru"
+              subtitle="Aktivitas terbaru Anda"
               action={
                 <Link href="/transactions" className="text-body-sm text-primary font-semibold">
-                  View all
+                  Lihat semua
                 </Link>
               }
             />
@@ -204,9 +275,9 @@ export default async function DashboardPage() {
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-container grid place-items-center">
                   <Icon name="receipt_long" />
                 </div>
-                <p className="text-body-md text-on-surface mb-2">No transactions yet</p>
-                <p className="text-body-sm text-outline mb-4">
-                  Start by adding your first transaction.
+                <p className="text-body-md text-on-surface mb-2">Belum ada transaksi</p>
+                <p className="text-body-sm text-on-surface-variant mb-4">
+                  Mulai dengan menambahkan transaksi pertama Anda.
                 </p>
                 <Link href="/transactions/new">
                   <Button size="sm">
@@ -218,9 +289,9 @@ export default async function DashboardPage() {
             )}
           </Card>
 
-          <Card>
-            <CardHeader title="Top Categories" subtitle="Expense breakdown" />
-            <CategoryBars rows={catRows} currency={currency} />
+          <Card className="animate-fade-up">
+            <CardHeader title="Kategori Teratas" subtitle="Rincian pengeluaran bulan ini" />
+            <CategoryDonut rows={catRows} currency={currency} />
           </Card>
         </div>
       </div>

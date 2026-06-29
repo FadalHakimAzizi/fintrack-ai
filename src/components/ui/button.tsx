@@ -6,12 +6,12 @@ type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-primary text-on-primary hover:bg-on-primary-fixed-variant disabled:opacity-60",
+    "bg-primary text-on-primary shadow-xs hover:bg-on-primary-fixed-variant hover:shadow-card hover:-translate-y-px disabled:opacity-60",
   secondary:
-    "bg-secondary text-on-secondary hover:bg-on-secondary-fixed-variant disabled:opacity-60",
+    "bg-secondary text-on-secondary shadow-xs hover:bg-on-secondary-fixed-variant hover:shadow-card hover:-translate-y-px disabled:opacity-60",
   ghost:
-    "bg-transparent border border-outline-variant/50 text-on-surface-variant hover:bg-surface-container",
-  danger: "bg-error text-on-error hover:opacity-90 disabled:opacity-60",
+    "bg-surface-container-low border border-outline/30 text-on-surface hover:bg-surface-container hover:border-outline/60",
+  danger: "bg-error text-on-error shadow-xs hover:opacity-90 hover:shadow-card disabled:opacity-60",
 };
 
 const sizes: Record<Size, string> = {
@@ -31,7 +31,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors shadow-sm active:scale-[0.98]",
+        "inline-flex items-center justify-center gap-2 rounded-lg font-medium",
+        "transition-[transform,box-shadow,background-color,opacity] duration-200 ease-out",
+        "active:translate-y-0 active:scale-[0.98]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+        "disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none",
         variants[variant],
         sizes[size],
         className,
