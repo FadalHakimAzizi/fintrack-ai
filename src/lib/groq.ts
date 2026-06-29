@@ -176,6 +176,9 @@ export async function groqTranscribe(
     form.append("file", file, filename);
     form.append("model", opts?.model || GROQ_TRANSCRIBE_MODEL);
     form.append("response_format", "json");
+    // temperature 0 → deterministic; cuts Whisper's tendency to hallucinate
+    // filler phrases on short or near-silent audio.
+    form.append("temperature", "0");
     if (opts?.language) form.append("language", opts.language);
 
     let res: Response;

@@ -24,6 +24,15 @@ const SR_ERRORS: Record<string, string> = {
   "audio-capture": "Mikrofon tidak terdeteksi",
 };
 
+// Whisper picks its decoder from the file extension, so the name must match the
+// actual recording container (Safari records mp4, Chrome webm, etc.).
+function audioFilename(mime: string): string {
+  if (mime.includes("ogg")) return "audio.ogg";
+  if (mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac")) return "audio.mp4";
+  if (mime.includes("wav")) return "audio.wav";
+  return "audio.webm";
+}
+
 /**
  * Voice input with two modes:
  *  - "live"   → Web Speech API, real-time interim results (Chrome/Edge).
@@ -40,6 +49,7 @@ export function VoiceInput({ onText, onStart, lang = "id-ID", disabled, classNam
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const recordStartRef = useRef(0);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -132,11 +142,11 @@ export function VoiceInput({ onText, onStart, lang = "id-ID", disabled, classNam
   }
 
   // ── RECORD (MediaRecorder → Groq Whisper) ──
-  async function transcribe(blob: Blob) {
+  async function transcribe(blob: Blob, filename: string) {
     setState("transcribing");
     try {
       const fd = new FormData();
-      fd.append("file", blob, "audio.webm");
+      fd.append("file", blob, filename);
       fd.append("language", lang);
       const res = await fetch("/api/transcribe", { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
@@ -166,10 +176,18 @@ export function VoiceInput({ onText, onStart, lang = "id-ID", disabled, classNam
       recorder.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
       recorder.onstop = () => {
         stopStream();
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        if (blob.size > 0) transcribe(blob);
-        else setState("idle");
+        const m = recorder.mimeType || "audio/webm";
+        const dur = Date.now() - recordStartRef.current;
+        const blob = new Blob(chunksRef.current, { type: m });
+        // Whisper hallucinates random phrases on very short / near-silent clips.
+        if (dur < 1000 || blob.size < 2048) {
+          showError("Rekaman terlalu singkat — tahan lebih lama lalu coba lagi.");
+          setState("idle");
+          return;
+        }
+        transcribe(blob, audioFilename(m));
       };
+      recordStartRef.current = Date.now();
       recorder.start();
       recorderRef.current = recorder;
       setState("recording");

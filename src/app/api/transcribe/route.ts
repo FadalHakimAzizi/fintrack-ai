@@ -28,7 +28,8 @@ export async function POST(request: Request) {
   const rawLang = (form.get("language") as string) || "";
   const language = rawLang ? rawLang.split("-")[0] : undefined;
 
-  const result = await groqTranscribe(file, "audio.webm", { language });
+  const filename = file instanceof File && file.name ? file.name : "audio.webm";
+  const result = await groqTranscribe(file, filename, { language });
   if (!result.ok) {
     const msg =
       result.status === 429
