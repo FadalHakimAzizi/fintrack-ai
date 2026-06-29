@@ -17,11 +17,20 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const PROVIDER = (process.env.EMBEDDINGS_PROVIDER || "ollama").toLowerCase();
-const BASE_URL = (process.env.EMBEDDINGS_BASE_URL || "http://localhost:11434").replace(/\/$/, "");
-const API_KEY = process.env.EMBEDDINGS_API_KEY || "";
-const MODEL =
-  process.env.EMBEDDINGS_MODEL || (PROVIDER === "ollama" ? "qwen3-embedding:0.6b" : "");
+// NOTE: .trim() every value — env vars added via a PowerShell pipe into
+// `vercel env add` can carry a trailing \r, which silently breaks a strict
+// provider compare ("voyage\r" !== "voyage") and any header/URL built from them.
+const PROVIDER = (process.env.EMBEDDINGS_PROVIDER || "ollama").trim().toLowerCase();
+const BASE_URL = (process.env.EMBEDDINGS_BASE_URL || "http://localhost:11434")
+  .trim()
+  .replace(/\/$/, "");
+const API_KEY = (process.env.EMBEDDINGS_API_KEY || "").trim();
+const MODEL = (
+  process.env.EMBEDDINGS_MODEL || (PROVIDER === "ollama" ? "qwen3-embedding:0.6b" : "")
+).trim();
+
+/** Resolved embeddings provider (trimmed, lower-cased). Used for accurate error hints. */
+export const EMBEDDINGS_PROVIDER_NAME = PROVIDER;
 
 export const EMBEDDING_DIM = Number(process.env.EMBEDDINGS_DIM || 1024);
 

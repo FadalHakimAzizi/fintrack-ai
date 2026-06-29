@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { embed, transactionToText, embeddingsEnabled } from "@/lib/embeddings";
+import {
+  embed,
+  transactionToText,
+  embeddingsEnabled,
+  EMBEDDINGS_PROVIDER_NAME,
+} from "@/lib/embeddings";
 
 // Embeds transactions that don't have a vector yet (existing rows, n8n/CSV
 // imports, etc.). Processes a bounded batch per call so the client can loop
@@ -78,15 +83,15 @@ export async function POST(request: Request) {
 
   const remaining = count ?? 0;
 
-  // If we processed a full batch but embedded nothing, Ollama is likely
-  // unreachable — surface that instead of looping forever.
+  // If we processed a full batch but embedded nothing, the embeddings provider
+  // is failing — surface a provider-specific hint instead of looping forever.
   if ((rows?.length ?? 0) > 0 && embedded === 0) {
+    const hint =
+      EMBEDDINGS_PROVIDER_NAME === "ollama"
+        ? "Pastikan Ollama berjalan dan model 'qwen3-embedding:0.6b' sudah di-pull."
+        : `Provider embedding '${EMBEDDINGS_PROVIDER_NAME}' gagal merespons. Periksa EMBEDDINGS_API_KEY, EMBEDDINGS_BASE_URL, dan EMBEDDINGS_MODEL di environment.`;
     return NextResponse.json(
-      {
-        error:
-          "Tidak ada yang berhasil di-embed. Pastikan Ollama berjalan dan model 'qwen3-embedding:0.6b' sudah di-pull.",
-        remaining,
-      },
+      { error: `Tidak ada yang berhasil di-embed. ${hint}`, remaining },
       { status: 502 },
     );
   }

@@ -8,15 +8,18 @@
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-export const GROQ_TEXT_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+export const GROQ_TEXT_MODEL = (process.env.GROQ_MODEL || "llama-3.3-70b-versatile").trim();
 // Llama 4 Scout is multimodal on Groq (accepts image_url content).
-export const GROQ_VISION_MODEL =
-  process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
+export const GROQ_VISION_MODEL = (
+  process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct"
+).trim();
 
+// .trim() guards against a trailing \r (e.g. a key piped into `vercel env add`
+// from PowerShell) — a CR in an Authorization header makes fetch() throw.
 function groqKeys(): string[] {
-  return [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_BACKUP].filter(
-    (k): k is string => Boolean(k),
-  );
+  return [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_BACKUP]
+    .map((k) => k?.trim())
+    .filter((k): k is string => Boolean(k));
 }
 
 export interface GroqChatResult {
@@ -143,8 +146,9 @@ export async function groqChatStream(
 }
 
 const GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
-export const GROQ_TRANSCRIBE_MODEL =
-  process.env.GROQ_TRANSCRIBE_MODEL || "whisper-large-v3-turbo";
+export const GROQ_TRANSCRIBE_MODEL = (
+  process.env.GROQ_TRANSCRIBE_MODEL || "whisper-large-v3-turbo"
+).trim();
 
 export interface GroqTranscribeResult {
   ok: boolean;
