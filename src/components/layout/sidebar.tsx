@@ -38,7 +38,7 @@ export function Sidebar({ userEmail }: { userEmail: string | null }) {
 
       <nav
         className={cn(
-          "fixed left-0 top-0 z-40 flex h-screen flex-col p-3",
+          "fixed left-0 top-0 z-40 flex h-[100dvh] flex-col p-3",
           "bg-surface-container-lowest/90 backdrop-blur-xl",
           "border-r border-outline-variant/40",
           "w-64", // mobile drawer width

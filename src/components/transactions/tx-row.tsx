@@ -34,7 +34,7 @@ export function TxRow({ tx }: { tx: Transaction }) {
   return (
     <Link
       href={`/transactions/${tx.id}`}
-      className="group flex items-center gap-4 px-4 py-3 rounded-xl border border-transparent hover:border-outline-variant/40 hover:bg-surface-container-low hover:shadow-xs transition-all"
+      className="group flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4 rounded-xl border border-transparent hover:border-outline-variant/40 hover:bg-surface-container-low hover:shadow-xs transition-all"
     >
       <div
         className={cn(
@@ -56,12 +56,12 @@ export function TxRow({ tx }: { tx: Transaction }) {
             </span>
           )}
         </div>
-        <div className="text-body-sm text-outline flex items-center gap-2">
+        <div className="text-body-sm text-outline flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span>{tx.category || "Uncategorized"}</span>
-          <span>·</span>
+          <span aria-hidden>·</span>
           <span>{formatDate(tx.transaction_date)}</span>
-          <span>·</span>
-          <span className="inline-flex items-center gap-1">
+          <span aria-hidden className="hidden sm:inline">·</span>
+          <span className="hidden sm:inline-flex items-center gap-1">
             <Icon name={SOURCE_ICON[tx.source_channel] || "label"} />
             {tx.source_channel}
           </span>
