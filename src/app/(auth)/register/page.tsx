@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,10 +17,22 @@ async function register(formData: FormData) {
   }
 
   const supabase = createClient();
+  // Build an absolute origin from the request (prod domain in prod, localhost in
+  // dev) so the confirmation email links back here instead of a hardcoded host.
+  const h = headers();
+  const host = h.get("host");
+  const proto = h.get("x-forwarded-proto") || (host?.startsWith("localhost") ? "http" : "https");
+  // Prefer the real request origin (the domain the user is actually on) so this
+  // self-corrects in prod even if NEXT_PUBLIC_APP_URL is stale/localhost.
+  const origin =
+    (host ? `${proto}://${host}` : "") || process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "";
   const { error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    options: {
+      data: { full_name: fullName },
+      ...(origin ? { emailRedirectTo: `${origin}/login` } : {}),
+    },
   });
   if (error) {
     redirect(`/register?error=${encodeURIComponent(error.message)}`);

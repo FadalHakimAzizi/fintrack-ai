@@ -593,6 +593,10 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+  /* Native controls (<select> option lists, date pickers, native scrollbars)
+     follow the active mode — fixes white-on-white dropdowns in dark mode. */
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
   /* Ambient depth — faint, theme-tinted glow anchored to the corners.
      Sits behind everything; adds richness without touching layout. */
   body::before {
