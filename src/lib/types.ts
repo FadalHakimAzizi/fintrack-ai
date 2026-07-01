@@ -8,14 +8,9 @@ export interface Transaction {
   transaction_type: TransactionType;
   item_name: string | null;
   category: string | null;
-  subcategory: string | null;
   merchant_name: string | null;
   transaction_date: string;
   amount: number;
-  quantity: number | null;
-  unit_price: number | null;
-  tax_amount: number | null;
-  discount_amount: number | null;
   currency: string;
   payment_method: string | null;
   account_name: string | null;
@@ -30,10 +25,8 @@ export interface Transaction {
   recurring_flag: boolean;
   recurring_period: string | null;
   confidence_score: number | null;
-  category_confidence: number | null;
   parsed_status: ParsedStatus;
   reviewed_by_user: boolean;
-  balance_after_transaction: number | null;
   created_at: string;
   updated_at: string;
 }

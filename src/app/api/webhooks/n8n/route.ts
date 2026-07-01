@@ -19,7 +19,6 @@ const Payload = z.object({
   merchant_name: z.string().optional().nullable(),
   item_name: z.string().optional().nullable(),
   category: z.string().optional().nullable(),
-  subcategory: z.string().optional().nullable(),
   payment_method: z.string().optional().nullable(),
   account_name: z.string().optional().nullable(),
   currency: z.string().optional(),
@@ -32,7 +31,6 @@ const Payload = z.object({
   attachment_url: z.string().url().optional().nullable(),
   attachment_path: z.string().optional().nullable(),
   confidence_score: z.number().min(0).max(1).optional().nullable(),
-  category_confidence: z.number().min(0).max(1).optional().nullable(),
   parsed_status: z.enum(["pending", "parsed", "reviewed", "failed"]).optional(),
 });
 
@@ -69,7 +67,6 @@ export async function POST(request: Request) {
       merchant_name: p.merchant_name ?? null,
       item_name: p.item_name ?? null,
       category: p.category ?? null,
-      subcategory: p.subcategory ?? null,
       payment_method: p.payment_method ?? null,
       account_name: p.account_name ?? null,
       currency: p.currency || "IDR",
@@ -82,7 +79,6 @@ export async function POST(request: Request) {
       attachment_url: p.attachment_url ?? null,
       attachment_path: p.attachment_path ?? null,
       confidence_score: p.confidence_score ?? null,
-      category_confidence: p.category_confidence ?? null,
       parsed_status: p.parsed_status || "parsed",
       reviewed_by_user: false,
     })
